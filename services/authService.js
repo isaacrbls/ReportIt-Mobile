@@ -1,27 +1,49 @@
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  updateProfile,
-  onAuthStateChanged
-} from 'firebase/auth';
-import { ref, set, get, child } from 'firebase/database';
-import { auth, realtimeDb } from '../config/firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Check if username is available
+// Simple auth state management without Firebase
+let currentUser = null;
+let authStateListeners = [];
+
+// Export simplified auth functions
+export const auth = {
+  currentUser: null
+};
+
+export const onAuthStateChanged = (callback) => {
+  authStateListeners.push(callback);
+  // Call immediately with current state
+  callback(currentUser);
+  
+  // Return unsubscribe function
+  return () => {
+    authStateListeners = authStateListeners.filter(listener => listener !== callback);
+  };
+};
+
+// Notify all listeners of auth state change
+const notifyAuthStateChange = (user) => {
+  currentUser = user;
+  auth.currentUser = user;
+  authStateListeners.forEach(callback => callback(user));
+};
+
+// Check if username is available (simplified - just check if not empty)
 export const checkUsernameAvailability = async (username) => {
-  try {
-    if (!realtimeDb) {
-      console.error('Database not initialized');
-      return false;
-    }
-    const dbRef = ref(realtimeDb);
-    const snapshot = await get(child(dbRef, `usernames/${username}`));
-    return !snapshot.exists(); // Returns true if username is available
-  } catch (error) {
-    console.error('Error checking username:', error);
+  // Simple validation without backend
+  console.log('Username validation for:', username);
+  
+  // Check for basic requirements
+  if (!username || username.length < 3) {
     return false;
   }
+  
+  // Check against reserved usernames
+  const reservedUsernames = ['admin', 'root', 'user', 'test', 'guest'];
+  if (reservedUsernames.includes(username.toLowerCase())) {
+    return false;
+  }
+  
+  return true;
 };
 
 // Validate password strength
@@ -50,18 +72,11 @@ export const validatePassword = (password) => {
   };
 };
 
-// Check if Firebase is initialized
-const isFirebaseReady = () => {
-  return auth && realtimeDb;
-};
-
-// Register new user
-export const registerUser = async (email, password, firstName, lastName, username) => {
+// Register new user (simplified without Firebase)
+export const registerUser = async (email, password, firstName, lastName, username, role = "User", barangay = "") => {
   try {
-    if (!isFirebaseReady()) {
-      return { success: false, error: 'Firebase services are not ready. Please try again.' };
-    }
-
+    console.log('Starting user registration process...');
+    
     // Validate password strength
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.isValid) {
@@ -71,38 +86,29 @@ export const registerUser = async (email, password, firstName, lastName, usernam
     // Check if username is available
     const isUsernameAvailable = await checkUsernameAvailability(username);
     if (!isUsernameAvailable) {
-      return { success: false, error: 'Username is already taken' };
+      return { success: false, error: 'Username is already taken. Please choose a different username.' };
     }
 
-    // Create user with email and password in Firebase Auth
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    
-    // Update user profile in Auth
-    await updateProfile(user, {
-      displayName: `${firstName} ${lastName}`
-    });
-    
-    // Store user data in Realtime Database
-    const userRef = ref(realtimeDb, `users/${user.uid}`);
-    await set(userRef, {
-      firstName,
-      lastName,
-      username,
-      email,
-      uid: user.uid,
-      createdAt: new Date().toISOString(),
-      isActive: true,
-      lastLogin: new Date().toISOString()
-    });
-
-    // Reserve the username
-    const usernameRef = ref(realtimeDb, `usernames/${username}`);
-    await set(usernameRef, {
-      uid: user.uid,
+    // Simulate user creation
+    const user = {
+      uid: Date.now().toString(), // Simple UID generation
+      email: email,
+      displayName: `${firstName} ${lastName}`,
+      firstName: firstName,
+      lastName: lastName,
+      username: username,
+      role: role,
+      barangay: barangay,
       createdAt: new Date().toISOString()
-    });
+    };
+
+    // Store user data locally
+    await AsyncStorage.setItem('currentUser', JSON.stringify(user));
     
+    // Update auth state
+    notifyAuthStateChange(user);
+    
+    console.log('User registered successfully (local storage)');
     return { success: true, user };
   } catch (error) {
     console.error('Registration error:', error);
@@ -110,21 +116,31 @@ export const registerUser = async (email, password, firstName, lastName, usernam
   }
 };
 
-// Login user
+// Login user (simplified without Firebase)
 export const loginUser = async (email, password) => {
   try {
-    if (!isFirebaseReady()) {
-      return { success: false, error: 'Firebase services are not ready. Please try again.' };
-    }
+    // Allow login with any credentials - no validation required
+    const user = {
+      uid: Date.now().toString(),
+      email: email || 'demo@example.com',
+      displayName: 'Demo User',
+      firstName: 'Demo',
+      lastName: 'User',
+      username: 'demouser',
+      role: 'User',
+      barangay: 'Demo Barangay',
+      createdAt: new Date().toISOString(),
+      lastLogin: new Date().toISOString()
+    };
 
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
+    // Store user data locally
+    await AsyncStorage.setItem('currentUser', JSON.stringify(user));
 
-    // Update last login time in Realtime Database
-    const userRef = ref(realtimeDb, `users/${user.uid}/lastLogin`);
-    await set(userRef, new Date().toISOString());
+    // Update auth state
+    notifyAuthStateChange(user);
 
-    return { success: true, user: userCredential.user };
+    console.log('User logged in successfully (local auth)');
+    return { success: true, user: user };
   } catch (error) {
     console.error('Login error:', error);
     return { success: false, error: error.message };
@@ -134,10 +150,9 @@ export const loginUser = async (email, password) => {
 // Logout user
 export const logoutUser = async () => {
   try {
-    if (!auth) {
-      return { success: false, error: 'Auth not initialized' };
-    }
-    await signOut(auth);
+    await AsyncStorage.removeItem('currentUser');
+    notifyAuthStateChange(null);
+    console.log('User logged out successfully');
     return { success: true };
   } catch (error) {
     console.error('Logout error:', error);
@@ -145,44 +160,61 @@ export const logoutUser = async () => {
   }
 };
 
-// Get user data from Realtime Database
+// Get user data (simplified)
 export const getUserData = async (uid) => {
   try {
-    const dbRef = ref(realtimeDb);
-    const snapshot = await get(child(dbRef, `users/${uid}`));
-    
-    if (snapshot.exists()) {
-      return { success: true, userData: snapshot.val() };
-    } else {
-      return { success: false, error: 'No user data found' };
+    const storedUser = await AsyncStorage.getItem('currentUser');
+    if (storedUser) {
+      const userData = JSON.parse(storedUser);
+      if (userData.uid === uid) {
+        return { success: true, userData: userData };
+      }
     }
+    return { success: false, error: 'No user data found' };
   } catch (error) {
     return { success: false, error: error.message };
   }
 };
 
-// Get user by username
+// Get user by username (simplified)
 export const getUserByUsername = async (username) => {
   try {
-    const dbRef = ref(realtimeDb);
-    const usernameSnapshot = await get(child(dbRef, `usernames/${username}`));
-    
-    if (usernameSnapshot.exists()) {
-      const uid = usernameSnapshot.val().uid;
-      const userSnapshot = await get(child(dbRef, `users/${uid}`));
-      
-      if (userSnapshot.exists()) {
-        return { success: true, userData: userSnapshot.val() };
+    const storedUser = await AsyncStorage.getItem('currentUser');
+    if (storedUser) {
+      const userData = JSON.parse(storedUser);
+      if (userData.username === username) {
+        return { success: true, userData: userData };
       }
     }
-    
     return { success: false, error: 'User not found' };
   } catch (error) {
     return { success: false, error: error.message };
   }
 };
 
-// Listen to auth state changes
-export const onAuthStateChange = (callback) => {
-  return onAuthStateChanged(auth, callback);
+// Initialize auth state from storage
+export const initializeAuth = async () => {
+  try {
+    const storedUser = await AsyncStorage.getItem('currentUser');
+    if (storedUser) {
+      const user = JSON.parse(storedUser);
+      notifyAuthStateChange(user);
+    }
+  } catch (error) {
+    console.error('Error initializing auth:', error);
+  }
+};
+
+// Default export with all functions
+export default {
+  loginUser,
+  registerUser,
+  logoutUser,
+  getUserData,
+  getUserByUsername,
+  checkUsernameAvailability,
+  validatePassword,
+  initializeAuth,
+  auth,
+  onAuthStateChanged
 };

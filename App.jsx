@@ -8,6 +8,9 @@ import SignupScreen from './screens/SignupScreen';
 import MapScreen from './screens/MapScreen';
 import IncidentAnalysisScreen from './screens/IncidentAnalysisScreen';
 
+// NOTE: This file is currently NOT used. Entry -> index.js -> App.js.
+// Remove this file or merge needed parts into App.js to avoid confusion.
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('welcome'); // Start with welcome screen
   const [userLocation, setUserLocation] = useState(null);

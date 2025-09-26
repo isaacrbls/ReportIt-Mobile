@@ -1,259 +1,164 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { ExclamationTriangleIcon, ChartBarIcon, ChevronDownIcon } from 'react-native-heroicons/outline';
+import { 
+  View, 
+  Text, 
+  ScrollView, 
+  TouchableOpacity, 
+  Dimensions,
+  SafeAreaView,
+  Alert 
+} from 'react-native';
+import { 
+  ArrowLeftIcon, 
+  ExclamationTriangleIcon,
+  ChartBarIcon
+} from 'react-native-heroicons/outline';
+
+const { width } = Dimensions.get('window');
 
 export default function IncidentAnalysisScreen({ navigation }) {
-  const [timePeriod, setTimePeriod] = useState('Last 30 days');
+  const [selectedPeriod, setSelectedPeriod] = useState('Last 30 days');
 
-  const incidentData = [
-    { type: 'Theft', count: 45, height: 200 },
-    { type: 'Robbery', count: 15, height: 80 },
-    { type: 'Burglary', count: 35, height: 150 }
-  ];
-
+  // Risk prediction data
   const riskPredictions = [
-    { location: 'Bulihan', risk: 'High risk', percentage: 85, color: '#EF4444' },
-    { location: 'Barasoain', risk: 'Moderate risk', percentage: 60, color: '#F59E0B' },
-    { location: 'Sumapa', risk: 'Low risk', percentage: 25, color: '#22C55E' }
+    { area: 'Bulihan', risk: 'High risk', level: 90 },
+    { area: 'Barasoan', risk: 'Moderate risk', level: 60 },
+    { area: 'Sumapa', risk: 'Low risk', level: 25 }
   ];
 
-  const handleBackToMap = () => {
-    if (navigation) {
-      navigation.goBack();
-    }
+  // Incident types data for bar chart
+  const incidentData = [
+    { type: 'Theft', value: 45, height: 180 },
+    { type: 'Robbery', value: 25, height: 100 },
+    { type: 'Burglary', value: 35, height: 140 }
+  ];
+
+  const getRiskColor = (level) => {
+    if (level >= 80) return '#EF4444';
+    if (level >= 50) return '#F59E0B'; 
+    return '#22C55E';
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView className="flex-1 bg-gray-50" style={{ flex: 1, backgroundColor: '#F9FAFB' }}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Incident Analysis</Text>
+      <View className="bg-primary-500 flex-row items-center justify-center py-4" style={{ backgroundColor: '#EF4444', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16 }}>
+        <TouchableOpacity
+          className="absolute left-4"
+          style={{ position: 'absolute', left: 16 }}
+          onPress={() => navigation.goBack()}
+        >
+          <ArrowLeftIcon size={24} color="white" />
+        </TouchableOpacity>
+        
+        <Text className="text-white text-lg font-bold" style={{ color: 'white', fontSize: 18, fontWeight: 'bold' }}>Incident Analysis</Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Theft Trend Analysis */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Theft Trend analysis</Text>
-          <Text style={styles.sectionSubtitle}>
+      <ScrollView className="flex-1" style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        {/* Theft Trend Analysis Section */}
+        <View className="bg-white mx-4 mt-4 rounded-2xl p-6" style={{ backgroundColor: 'white', marginHorizontal: 16, marginTop: 16, borderRadius: 16, padding: 24 }}>
+          <Text className="text-xl font-bold text-gray-900 mb-2" style={{ fontSize: 20, fontWeight: 'bold', color: '#111827', marginBottom: 8 }}>
+            Theft Trend analysis
+          </Text>
+          <Text className="text-gray-600 text-sm mb-6" style={{ color: '#6B7280', fontSize: 14, marginBottom: 24 }}>
             View incident patterns and predictions based on ML analysis
           </Text>
 
-          <View style={styles.chartContainer}>
-            <View style={styles.chartHeader}>
-              <Text style={styles.chartTitle}>Incident Types</Text>
-              <TouchableOpacity style={styles.dropdown}>
-                <Text style={styles.dropdownText}>{timePeriod}</Text>
-                <ChevronDownIcon size={16} color="#6B7280" />
+          {/* Incident Types Chart */}
+          <View className="mb-6" style={{ marginBottom: 24 }}>
+            <View className="flex-row justify-between items-center mb-4" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text className="text-base font-semibold text-gray-800" style={{ fontSize: 16, fontWeight: '600', color: '#1F2937' }}>
+                Incident Types
+              </Text>
+              <TouchableOpacity className="flex-row items-center" style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text className="text-sm text-gray-600 mr-1" style={{ fontSize: 14, color: '#6B7280', marginRight: 4 }}>
+                  {selectedPeriod}
+                </Text>
+                <Text className="text-gray-400" style={{ color: '#9CA3AF' }}>▼</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.chart}>
-              {incidentData.map((item, index) => (
-                <View key={index} style={styles.chartBar}>
-                  <View style={[styles.bar, { height: item.height }]} />
-                  <Text style={styles.barLabel}>{item.type}</Text>
-                </View>
-              ))}
+            {/* Bar Chart */}
+            <View className="bg-gray-100 rounded-xl p-4" style={{ backgroundColor: '#F3F4F6', borderRadius: 12, padding: 16 }}>
+              <View className="flex-row items-end justify-around h-48" style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', height: 192 }}>
+                {incidentData.map((item, index) => (
+                  <View key={index} className="items-center" style={{ alignItems: 'center' }}>
+                    <View 
+                      className="bg-primary-500 rounded-t-md w-12 mb-2" 
+                      style={{ 
+                        backgroundColor: '#EF4444', 
+                        borderTopLeftRadius: 6, 
+                        borderTopRightRadius: 6, 
+                        width: 48, 
+                        height: item.height,
+                        marginBottom: 8 
+                      }} 
+                    />
+                    <Text className="text-xs text-gray-700 font-medium" style={{ fontSize: 12, color: '#374151', fontWeight: '500' }}>
+                      {item.type}
+                    </Text>
+                  </View>
+                ))}
+              </View>
             </View>
           </View>
         </View>
 
-        {/* Risk Prediction */}
-        <View style={styles.section}>
-          <View style={styles.riskHeader}>
-            <Text style={styles.sectionTitle}>Risk Prediction</Text>
-            <Text style={styles.mlLabel}>ML-based forecast</Text>
+        {/* Risk Prediction Section */}
+        <View className="bg-white mx-4 mt-4 rounded-2xl p-6" style={{ backgroundColor: 'white', marginHorizontal: 16, marginTop: 16, borderRadius: 16, padding: 24 }}>
+          <View className="flex-row justify-between items-center mb-4" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <Text className="text-base font-semibold text-gray-800" style={{ fontSize: 16, fontWeight: '600', color: '#1F2937' }}>
+              Risk Prediction
+            </Text>
+            <Text className="text-sm text-gray-500" style={{ fontSize: 14, color: '#6B7280' }}>
+              ML-based forecast
+            </Text>
           </View>
 
-          <View style={styles.riskContainer}>
-            {riskPredictions.map((item, index) => (
-              <View key={index} style={styles.riskItem}>
-                <View style={styles.riskInfo}>
-                  <Text style={styles.locationName}>{item.location}</Text>
-                  <Text style={styles.riskLevel}>{item.risk}</Text>
-                </View>
-                <View style={styles.progressBarContainer}>
-                  <View 
-                    style={[
-                      styles.progressBar, 
-                      { 
-                        width: `${item.percentage}%`, 
-                        backgroundColor: item.color 
-                      }
-                    ]} 
-                  />
-                </View>
+          {riskPredictions.map((prediction, index) => (
+            <View key={index} className="mb-4" style={{ marginBottom: 16 }}>
+              <View className="flex-row justify-between items-center mb-2" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text className="text-gray-800 font-medium" style={{ color: '#1F2937', fontWeight: '500' }}>
+                  {prediction.area}
+                </Text>
+                <Text className="text-sm text-gray-600" style={{ fontSize: 14, color: '#6B7280' }}>
+                  {prediction.risk}
+                </Text>
               </View>
-            ))}
-          </View>
+              <View className="bg-gray-200 rounded-full h-2" style={{ backgroundColor: '#E5E7EB', borderRadius: 10, height: 8 }}>
+                <View 
+                  className="rounded-full h-2" 
+                  style={{ 
+                    backgroundColor: getRiskColor(prediction.level), 
+                    borderRadius: 10, 
+                    height: 8, 
+                    width: prediction.level + '%'
+                  }} 
+                />
+              </View>
+            </View>
+          ))}
         </View>
       </ScrollView>
 
       {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navButton} onPress={handleBackToMap}>
+      <View className="bg-primary-500 flex-row justify-around py-4" style={{ backgroundColor: '#EF4444', flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 16 }}>
+        <TouchableOpacity 
+          className="items-center"
+          style={{ alignItems: 'center' }}
+          onPress={() => Alert.alert('Report', 'Report incident feature')}
+        >
           <ExclamationTriangleIcon size={24} color="white" />
         </TouchableOpacity>
         
-        <TouchableOpacity style={[styles.navButton, styles.activeNavButton]}>
+        <TouchableOpacity 
+          className="items-center"
+          style={{ alignItems: 'center' }}
+          onPress={() => navigation.navigate('Map')}
+        >
           <ChartBarIcon size={24} color="white" />
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  header: {
-    backgroundColor: '#EF4444',
-    paddingTop: 48,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  section: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 16,
-  },
-  chartContainer: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    padding: 16,
-  },
-  chartHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  chartTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  dropdown: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  dropdownText: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginRight: 4,
-  },
-  chart: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'flex-end',
-    height: 220,
-  },
-  chartBar: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  bar: {
-    width: 40,
-    backgroundColor: '#EF4444',
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  barLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  riskHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  mlLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontStyle: 'italic',
-  },
-  riskContainer: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    padding: 16,
-  },
-  riskItem: {
-    marginBottom: 20,
-  },
-  riskInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  locationName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  riskLevel: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  progressBarContainer: {
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  bottomNav: {
-    backgroundColor: '#EF4444',
-    flexDirection: 'row',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    justifyContent: 'space-around',
-  },
-  navButton: {
-    width: 56,
-    height: 56,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  activeNavButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-  },
-});
