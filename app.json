@@ -13,7 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "ReportIt needs access to your location to show nearby incident reports and help you report incidents at your current location.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "ReportIt needs access to your location to show nearby incident reports and help you report incidents at your current location."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,16 +25,18 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "googleServicesFile": "./google-services.json"
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "sdkVersion": "54.0.0",
-    "platforms": [
-      "ios",
-      "android",
-      "web"
+    "plugins": [
+      "expo-font"
     ]
   }
 }
