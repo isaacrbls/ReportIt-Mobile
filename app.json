@@ -24,6 +24,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+<<<<<<< HEAD
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -31,12 +32,23 @@
         "ACCESS_COARSE_LOCATION",
         "INTERNET"
       ]
+=======
+      "edgeToEdgeEnabled": true
+>>>>>>> e20dcf8baacb0637ed892b5e4aff8f989760ae2c
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+<<<<<<< HEAD
     "plugins": [
       "expo-font"
+=======
+    "sdkVersion": "54.0.0",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+>>>>>>> e20dcf8baacb0637ed892b5e4aff8f989760ae2c
     ]
   }
 }
