@@ -17,7 +17,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
-// SVG Icons
+
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
@@ -116,7 +116,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState('');
 
-  // Handle navigation params for terms acceptance
+
   React.useEffect(() => {
     if (route?.params?.termsAccepted === true) {
       setAgreeToTerms(true);
@@ -129,7 +129,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
     return null;
   }
 
-  // Password strength validation
+
   const checkPasswordStrength = (pwd: string) => {
     if (!pwd) {
       setPasswordStrength('');
@@ -153,7 +153,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   };
 
   const handleCreateAccount = () => {
-    // Add validation logic here
+
     console.log('Creating account...');
   };
 

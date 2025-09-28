@@ -16,7 +16,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
-// SVG Icons
+
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
@@ -67,7 +67,7 @@ const VerifyEmailScreen: React.FC<VerifyEmailScreenProps> = ({ navigation, route
     newCode[index] = text;
     setVerificationCode(newCode);
 
-    // Auto-focus next input
+
     if (text && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
@@ -87,7 +87,7 @@ const VerifyEmailScreen: React.FC<VerifyEmailScreenProps> = ({ navigation, route
   };
 
   const handleResendCode = () => {
-    // Resend verification code logic
+
     console.log('Resending code to:', email);
   };
 

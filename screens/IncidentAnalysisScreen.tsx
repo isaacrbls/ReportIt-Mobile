@@ -20,7 +20,7 @@ import {
 
 const { width: screenWidth } = Dimensions.get('window');
 
-// Bar Chart Component
+
 const BarChart = ({ data, width, height }: { data: any[], width: number, height: number }) => {
   const maxValue = Math.max(...data.map(d => d.value));
   const barWidth = (width - 60) / data.length - 10;
@@ -60,7 +60,7 @@ const BarChart = ({ data, width, height }: { data: any[], width: number, height:
   );
 };
 
-// Progress Bar Component
+
 const ProgressBar = ({ value, maxValue, color = "#EF4444" }: { value: number, maxValue: number, color?: string }) => {
   const percentage = (value / maxValue) * 100;
   

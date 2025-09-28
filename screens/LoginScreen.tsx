@@ -17,7 +17,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
-// SVG Icons
+
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
@@ -114,7 +114,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   }
 
   const handleLogin = () => {
-    // Add login logic here
+
     console.log('Logging in...');
     navigation.navigate('Map');
   };

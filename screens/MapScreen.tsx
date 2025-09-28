@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,9 @@ import {
   SafeAreaView,
   Dimensions,
   Alert,
+  Modal,
+  Image,
+  Animated,
 } from 'react-native';
 import FontAwesome from '@react-native-vector-icons/fontawesome';
 import { WebView } from 'react-native-webview';
@@ -21,14 +24,10 @@ import {
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-
-
-// Map Component using Leaflet in WebView
 const MapView = ({ userLocation }: { userLocation: LocationCoords | null }) => {
   const mapWidth = screenWidth;
-  const mapHeight = screenHeight - 200; // Account for header and bottom nav
+  const mapHeight = screenHeight - 200;
 
-  // Use user location if available, otherwise default to Bulacan
   const mapCenter = userLocation 
     ? [userLocation.latitude, userLocation.longitude]
     : [14.7942, 120.8781];
@@ -136,6 +135,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [userLocation, setUserLocation] = useState<LocationCoords | null>(null);
   const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
+  const [isReportModalVisible, setIsReportModalVisible] = useState(false);
+  const [isLocationPermissionModalVisible, setIsLocationPermissionModalVisible] = useState(false);
+  const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
+  const [reportType, setReportType] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
+  const [isUserLoggedIn, setIsUserLoggedIn] = useState(false);
+  const slideAnim = useRef(new Animated.Value(-280)).current;
 
   // Request location permission and get current location on component mount
   useEffect(() => {
@@ -160,6 +167,63 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
 
     initializeLocation();
   }, [fontsLoaded]);
+
+  const handleReportPress = async () => {
+    const locationPermission = await LocationService.getInstance().requestLocationPermission();
+    
+    if (!locationPermission.granted) {
+      setIsLocationPermissionModalVisible(true);
+      return;
+    }
+
+    const isLoggedIn = true;
+    
+    if (!isLoggedIn) {
+      navigation.navigate('Login');
+      return;
+    }
+
+    setIsReportModalVisible(true);
+  };
+
+  const handleNotificationPress = () => {
+    setIsNotificationModalVisible(true);
+  };
+
+  const handleAllowNotifications = () => {
+    setIsNotificationModalVisible(false);
+  };
+
+  const handleEditProfilePress = () => {
+    Animated.timing(slideAnim, {
+      toValue: -280,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setIsSidebarVisible(false);
+      navigation.navigate('EditProfile');
+    });
+  };
+
+  const handleLocationPermissionRequest = async () => {
+    const locationService = LocationService.getInstance();
+    const permission = await locationService.requestLocationPermission();
+    setLocationPermissionGranted(permission.granted);
+
+    if (permission.granted) {
+      const location = await locationService.getCurrentLocation();
+      if (location) {
+        setUserLocation(location);
+        setIsLocationPermissionModalVisible(false);
+        
+        if (isUserLoggedIn) {
+          setIsReportModalVisible(true);
+        } else {
+          navigation.navigate('Login');
+        }
+      }
+    }
+  };
 
   if (!fontsLoaded) {
     return null;
@@ -188,7 +252,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.menuButton}>
+        <TouchableOpacity 
+          style={styles.menuButton}
+          onPress={() => {
+            setIsSidebarVisible(true);
+            Animated.timing(slideAnim, {
+              toValue: 0,
+              duration: 300,
+              useNativeDriver: true,
+            }).start();
+          }}
+        >
           <FontAwesome name="bars" size={22} color="white" />
         </TouchableOpacity>
       </View>
@@ -214,7 +288,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         <TouchableOpacity style={styles.fab} onPress={handleLocationPress}>
           <FontAwesome name="crosshairs" size={22} color="#6B7280" />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.fab, styles.fabDanger]}>
+        <TouchableOpacity style={[styles.fab, styles.fabDanger]} onPress={handleReportPress}>
           <FontAwesome name="exclamation-triangle" size={22} color="white" />
         </TouchableOpacity>
       </View>
@@ -230,6 +304,220 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           <FontAwesome name="bar-chart" size={24} color="white" />
         </TouchableOpacity>
       </View>
+
+      {isSidebarVisible && (
+        <View style={styles.modalContainer}>
+          <Animated.View 
+            style={[
+              styles.sidebar,
+              { transform: [{ translateX: slideAnim }] }
+            ]}
+          >
+            <TouchableOpacity style={styles.profileContainer}>
+              <View style={styles.profileImageContainer}>
+                <Image
+                  source={{ uri: 'https://via.placeholder.com/60' }}
+                  style={styles.profileImage}
+                />
+              </View>
+              <Text style={styles.profileName}></Text>
+              <TouchableOpacity style={styles.editProfileButton}>
+                <Text style={styles.editProfileText}>Edit profile</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+
+            <View style={styles.menuSection}>
+              <TouchableOpacity style={styles.menuItem}>
+                <Text style={styles.menuItemText}>Report an Incident</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem} onPress={handleNotificationPress}>
+                <Text style={styles.menuItemText}>Enable Notifications</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem} onPress={handleEditProfilePress}>
+                <Text style={styles.menuItemText}>Edit Profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => {
+                  Animated.timing(slideAnim, {
+                    toValue: -280,
+                    duration: 300,
+                    useNativeDriver: true,
+                  }).start(() => {
+                    setIsSidebarVisible(false);
+                    navigation.navigate('TermsAndConditions');
+                  });
+                }}
+              >
+                <Text style={styles.menuItemText}>Terms and Condition</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => {
+                  Animated.timing(slideAnim, {
+                    toValue: -280,
+                    duration: 300,
+                    useNativeDriver: true,
+                  }).start(() => {
+                    setIsSidebarVisible(false);
+                    navigation.navigate('Login');
+                  });
+                }}
+              >
+                <Text style={styles.menuItemText}>Log Out</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+          <TouchableOpacity 
+            style={styles.modalBackground} 
+            activeOpacity={1} 
+            onPress={() => {
+              Animated.timing(slideAnim, {
+                toValue: -280,
+                duration: 300,
+                useNativeDriver: true,
+              }).start(() => setIsSidebarVisible(false));
+            }}
+          />
+        </View>
+      )}
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isLocationPermissionModalVisible}
+        onRequestClose={() => setIsLocationPermissionModalVisible(false)}
+      >
+        <View style={styles.permissionModalOverlay}>
+          <View style={styles.permissionModal}>
+            <View style={styles.permissionIcon}>
+              <FontAwesome name="map-marker" size={32} color="#EF4444" />
+            </View>
+            <Text style={styles.permissionTitle}>Location Services</Text>
+            <Text style={styles.permissionText}>
+              ReportIt needs access to your location to provide accurate risk assessments and alerts in your area.
+            </Text>
+            <View style={styles.permissionButtons}>
+              <TouchableOpacity 
+                style={styles.notNowButton}
+                onPress={() => setIsLocationPermissionModalVisible(false)}
+              >
+                <Text style={styles.notNowText}>Not now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.allowButton}
+                onPress={handleLocationPermissionRequest}
+              >
+                <Text style={styles.allowText}>Allow</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isNotificationModalVisible}
+        onRequestClose={() => setIsNotificationModalVisible(false)}
+      >
+        <View style={styles.permissionModalOverlay}>
+          <View style={styles.permissionModal}>
+            <View style={styles.permissionIcon}>
+              <FontAwesome name="bell" size={32} color="#EF4444" />
+            </View>
+            <Text style={styles.permissionTitle}>Notification</Text>
+            <Text style={styles.permissionText}>
+              Allow ReportIt to use notification access
+            </Text>
+            <View style={styles.permissionButtons}>
+              <TouchableOpacity 
+                style={styles.notNowButton}
+                onPress={() => setIsNotificationModalVisible(false)}
+              >
+                <Text style={styles.notNowText}>Not now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.allowButton}
+                onPress={handleAllowNotifications}
+              >
+                <Text style={styles.allowText}>Allow</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isReportModalVisible}
+        onRequestClose={() => setIsReportModalVisible(false)}
+      >
+        <View style={styles.reportModalOverlay}>
+          <View style={styles.reportModal}>
+            <Text style={styles.reportModalTitle}>Report Form</Text>
+            <Text style={styles.reportModalSubtitle}>Detail of report</Text>
+            
+            <View style={styles.reportForm}>
+              <Text style={styles.reportLabel}>Type of incident</Text>
+              <TextInput
+                style={styles.reportInput}
+                value={reportType}
+                onChangeText={setReportType}
+                placeholder="Enter incident type"
+                placeholderTextColor="#9CA3AF"
+              />
+
+              <Text style={styles.reportLabel}>Description</Text>
+              <TextInput
+                style={[styles.reportInput, styles.reportTextArea]}
+                value={reportDescription}
+                onChangeText={setReportDescription}
+                placeholder="Describe the incident"
+                placeholderTextColor="#9CA3AF"
+                multiline
+                numberOfLines={4}
+              />
+
+              <Text style={styles.reportLabel}>Add Media</Text>
+              <View style={styles.mediaButtons}>
+                <TouchableOpacity style={styles.mediaButton}>
+                  <View style={styles.mediaIcon}>
+                    <FontAwesome name="camera" size={24} color="white" />
+                  </View>
+                  <Text style={styles.mediaButtonText}>Photo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.mediaButton}>
+                  <View style={styles.mediaIcon}>
+                    <FontAwesome name="video-camera" size={24} color="white" />
+                  </View>
+                  <Text style={styles.mediaButtonText}>Video</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.reportModalButtons}>
+              <TouchableOpacity 
+                style={styles.backButton}
+                onPress={() => setIsReportModalVisible(false)}
+              >
+                <Text style={styles.backButtonText}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.submitButton}
+                onPress={() => {
+                  setIsReportModalVisible(false);
+                  Alert.alert('Success', 'Report submitted successfully');
+                }}
+              >
+                <Text style={styles.submitButtonText}>Submit Report</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -350,6 +638,254 @@ const styles = StyleSheet.create({
   },
   activeNavItem: {
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  modalContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+  },
+  modalBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  sidebar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 280,
+    backgroundColor: '#EF4444',
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    zIndex: 1001,
+  },
+  profileContainer: {
+    alignItems: 'center',
+    paddingVertical: 30,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+    marginBottom: 20,
+  },
+  profileImageContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  profileImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  profileName: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  editProfileButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'white',
+    borderRadius: 16,
+  },
+  editProfileText: {
+    color: 'white',
+    fontSize: 12,
+  },
+  menuSection: {
+    flex: 1,
+  },
+  menuItem: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  menuItemText: {
+    color: 'white',
+    fontSize: 16,
+  },
+  permissionModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  permissionModal: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 320,
+  },
+  permissionIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  permissionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  permissionText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  permissionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  notNowButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  notNowText: {
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  allowButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+  },
+  allowText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  reportModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  reportModal: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    maxHeight: '90%',
+  },
+  reportModalTitle: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  reportModalSubtitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  reportForm: {
+    marginBottom: 24,
+  },
+  reportLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#111827',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  reportInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#111827',
+    backgroundColor: '#F9FAFB',
+  },
+  reportTextArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  mediaButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  mediaButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  mediaIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  mediaButtonText: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  reportModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  backButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    alignItems: 'center',
+  },
+  backButtonText: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  submitButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

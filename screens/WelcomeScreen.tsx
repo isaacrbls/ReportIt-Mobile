@@ -18,7 +18,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
-// SVG Icons
+
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
@@ -52,7 +52,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
 
-  // Check location services availability on component mount
+
   useEffect(() => {
     if (!fontsLoaded) return;
 
@@ -66,7 +66,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
 
     checkLocationServices();
 
-    // Start animations
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,

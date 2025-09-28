@@ -16,7 +16,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
-// SVG Icons
+
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
@@ -59,7 +59,7 @@ const TermsAndConditionsScreen: React.FC<TermsAndConditionsScreenProps> = ({ nav
   }
 
   const handleAcceptTerms = () => {
-    // Navigate back to signup with accepted terms
+
     if (route?.params?.fromSignup) {
       navigation.navigate('Signup', { termsAccepted: true });
     } else {
@@ -68,7 +68,7 @@ const TermsAndConditionsScreen: React.FC<TermsAndConditionsScreenProps> = ({ nav
   };
 
   const handleDeclineTerms = () => {
-    // Navigate back to signup without accepting terms
+
     if (route?.params?.fromSignup) {
       navigation.navigate('Signup', { termsAccepted: false });
     } else {

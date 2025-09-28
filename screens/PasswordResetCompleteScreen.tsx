@@ -15,7 +15,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
-// SVG Icons
+
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
@@ -82,7 +82,7 @@ const PasswordResetCompleteScreen: React.FC<PasswordResetCompleteScreenProps> = 
   }
 
   const handleReturnToLogin = () => {
-    // Navigate back to login and reset the stack
+
     navigation.reset({
       index: 0,
       routes: [{ name: 'Welcome' }],

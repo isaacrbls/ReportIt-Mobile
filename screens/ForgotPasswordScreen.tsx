@@ -16,7 +16,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
-// SVG Icons
+
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
@@ -60,7 +60,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ navigation 
   }
 
   const handleSendVerificationCode = () => {
-    // Add email validation here
+
     if (email.includes('@')) {
       navigation.navigate('VerifyEmail', { email });
     }

@@ -16,7 +16,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
-// SVG Icons
+
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
@@ -103,7 +103,7 @@ const CreateNewPasswordScreen: React.FC<CreateNewPasswordScreenProps> = ({ navig
     return null;
   }
 
-  // Password strength validation
+
   const checkPasswordStrength = (pwd: string) => {
     if (!pwd) {
       setPasswordStrength('');
