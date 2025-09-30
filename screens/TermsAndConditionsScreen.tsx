@@ -61,7 +61,10 @@ const TermsAndConditionsScreen: React.FC<TermsAndConditionsScreenProps> = ({ nav
   const handleAcceptTerms = () => {
 
     if (route?.params?.fromSignup) {
-      navigation.navigate('Signup', { termsAccepted: true });
+      navigation.navigate('Signup', { 
+        termsAccepted: true,
+        formData: route?.params?.formData
+      });
     } else {
       navigation.goBack();
     }
@@ -70,7 +73,10 @@ const TermsAndConditionsScreen: React.FC<TermsAndConditionsScreenProps> = ({ nav
   const handleDeclineTerms = () => {
 
     if (route?.params?.fromSignup) {
-      navigation.navigate('Signup', { termsAccepted: false });
+      navigation.navigate('Signup', { 
+        termsAccepted: false,
+        formData: route?.params?.formData
+      });
     } else {
       navigation.goBack();
     }

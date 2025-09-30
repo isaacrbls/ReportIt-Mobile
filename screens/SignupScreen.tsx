@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import {
@@ -16,6 +18,8 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
+import { AuthService, SignupData } from '../services/AuthService';
+import { UserService } from '../services/UserService';
 
 
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
@@ -115,6 +119,17 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({
+    firstName: '',
+    lastName: '',
+    username: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    terms: '',
+    general: ''
+  });
 
 
   React.useEffect(() => {
@@ -123,7 +138,18 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
     } else if (route?.params?.termsAccepted === false) {
       setAgreeToTerms(false);
     }
-  }, [route?.params?.termsAccepted]);
+    
+    // Restore form data if coming back from terms
+    if (route?.params?.formData) {
+      const formData = route?.params?.formData;
+      setFirstName(formData.firstName || '');
+      setLastName(formData.lastName || '');
+      setUsername(formData.username || '');
+      setEmail(formData.email || '');
+      setPassword(formData.password || '');
+      setConfirmPassword(formData.confirmPassword || '');
+    }
+  }, [route?.params?.termsAccepted, route?.params?.formData]);
 
   if (!fontsLoaded) {
     return null;
@@ -150,11 +176,137 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   const handlePasswordChange = (text: string) => {
     setPassword(text);
     checkPasswordStrength(text);
+    // Clear password error when user starts typing
+    if (errors.password) {
+      setErrors(prev => ({ ...prev, password: '' }));
+    }
   };
 
-  const handleCreateAccount = () => {
+  const validateInputs = () => {
+    const newErrors = {
+      firstName: '',
+      lastName: '',
+      username: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+      terms: '',
+      general: ''
+    };
+    let isValid = true;
 
-    console.log('Creating account...');
+    // First Name validation
+    if (!firstName.trim()) {
+      newErrors.firstName = 'First name is required';
+      isValid = false;
+    }
+
+    // Last Name validation
+    if (!lastName.trim()) {
+      newErrors.lastName = 'Last name is required';
+      isValid = false;
+    }
+
+    // Username validation
+    if (!username.trim()) {
+      newErrors.username = 'Username is required';
+      isValid = false;
+    } else if (username.length < 3) {
+      newErrors.username = 'Username must be at least 3 characters';
+      isValid = false;
+    }
+
+    // Email validation
+    if (!email.trim()) {
+      newErrors.email = 'Email is required';
+      isValid = false;
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      newErrors.email = 'Please enter a valid email';
+      isValid = false;
+    }
+
+    // Password validation
+    if (!password) {
+      newErrors.password = 'Password is required';
+      isValid = false;
+    } else if (password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters';
+      isValid = false;
+    } else if (passwordStrength === 'WEAK') {
+      newErrors.password = 'Password must contain at least one number and one special character';
+      isValid = false;
+    }
+
+    // Confirm password validation
+    if (!confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
+      isValid = false;
+    } else if (password !== confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+      isValid = false;
+    }
+
+    // Terms validation
+    if (!agreeToTerms) {
+      newErrors.terms = 'You must agree to the terms and conditions';
+      isValid = false;
+    }
+
+    setErrors(newErrors);
+    return isValid;
+  };
+
+  const handleCreateAccount = async () => {
+    if (!validateInputs()) return;
+
+    setLoading(true);
+    setErrors(prev => ({ ...prev, general: '' }));
+
+    try {
+      // Temporarily skip database connection test until rules are fixed
+      // const dbTest = await UserService.testDatabaseConnection();
+      // if (!dbTest.success) {
+      //   console.error('Database connection test failed:', dbTest.error);
+      //   setErrors(prev => ({ ...prev, general: 'Database connection failed: ' + dbTest.error }));
+      //   Alert.alert('Database Error', 'Cannot connect to database: ' + dbTest.error);
+      //   return;
+      // }
+
+      const signupData: SignupData = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        username: username.trim().toLowerCase(),
+        email: email.trim().toLowerCase(),
+        password: password
+      };
+
+      console.log('Starting signup with data:', { ...signupData, password: '[HIDDEN]' });
+      const result = await AuthService.signUpWithProfile(signupData);
+      
+      if (result.success && result.user) {
+        console.log('Signup successful for user:', result.user.uid);
+        Alert.alert(
+          'Account Created!', 
+          'Your Firebase authentication account has been successfully created. You can now sign in!\n\n(Note: User profile data will be saved once database permissions are configured)', 
+          [
+            { 
+              text: 'OK', 
+              onPress: () => navigation.navigate('Login')
+            }
+          ]
+        );
+      } else {
+        console.error('Signup failed:', result.error);
+        setErrors(prev => ({ ...prev, general: result.error || 'Account creation failed' }));
+        Alert.alert('Signup Failed', result.error || 'Please try again.');
+      }
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      setErrors(prev => ({ ...prev, general: 'An unexpected error occurred' }));
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -182,52 +334,81 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>First Name</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, errors.firstName ? styles.inputError : null]}
               value={firstName}
-              onChangeText={setFirstName}
+              onChangeText={(text) => {
+                setFirstName(text);
+                if (errors.firstName) {
+                  setErrors(prev => ({ ...prev, firstName: '' }));
+                }
+              }}
               placeholder="First Name"
               placeholderTextColor="#9CA3AF"
+              editable={!loading}
             />
+            {errors.firstName ? <Text style={styles.errorText}>{errors.firstName}</Text> : null}
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Last Name</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, errors.lastName ? styles.inputError : null]}
               value={lastName}
-              onChangeText={setLastName}
+              onChangeText={(text) => {
+                setLastName(text);
+                if (errors.lastName) {
+                  setErrors(prev => ({ ...prev, lastName: '' }));
+                }
+              }}
               placeholder="Last Name"
               placeholderTextColor="#9CA3AF"
+              editable={!loading}
             />
+            {errors.lastName ? <Text style={styles.errorText}>{errors.lastName}</Text> : null}
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Username</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, errors.username ? styles.inputError : null]}
               value={username}
-              onChangeText={setUsername}
+              onChangeText={(text) => {
+                setUsername(text);
+                if (errors.username) {
+                  setErrors(prev => ({ ...prev, username: '' }));
+                }
+              }}
               placeholder="Username"
               placeholderTextColor="#9CA3AF"
+              autoCapitalize="none"
+              editable={!loading}
             />
+            {errors.username ? <Text style={styles.errorText}>{errors.username}</Text> : null}
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, errors.email ? styles.inputError : null]}
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (errors.email) {
+                  setErrors(prev => ({ ...prev, email: '' }));
+                }
+              }}
               placeholder="Email"
               placeholderTextColor="#9CA3AF"
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={!loading}
             />
+            {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
-            <View style={styles.passwordContainer}>
+            <View style={[styles.passwordContainer, errors.password ? styles.inputError : null]}>
               <TextInput
                 style={styles.passwordInput}
                 value={password}
@@ -235,6 +416,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                 placeholder="••••••••"
                 placeholderTextColor="#9CA3AF"
                 secureTextEntry={!showPassword}
+                editable={!loading}
               />
               <TouchableOpacity
                 style={styles.eyeButton}
@@ -260,18 +442,25 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                 </Text>
               </View>
             )}
+            {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Confirm Password</Text>
-            <View style={styles.passwordContainer}>
+            <View style={[styles.passwordContainer, errors.confirmPassword ? styles.inputError : null]}>
               <TextInput
                 style={styles.passwordInput}
                 value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                onChangeText={(text) => {
+                  setConfirmPassword(text);
+                  if (errors.confirmPassword) {
+                    setErrors(prev => ({ ...prev, confirmPassword: '' }));
+                  }
+                }}
                 placeholder="••••••••"
                 placeholderTextColor="#9CA3AF"
                 secureTextEntry={!showConfirmPassword}
+                editable={!loading}
               />
               <TouchableOpacity
                 style={styles.eyeButton}
@@ -280,23 +469,64 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                 {showConfirmPassword ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
               </TouchableOpacity>
             </View>
+            {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
           </View>
 
           <View style={styles.termsContainer}>
             <TouchableOpacity
               style={styles.checkbox}
-              onPress={() => navigation.navigate('TermsAndConditions', { fromSignup: true })}
+              onPress={() => {
+                // Save current form data before navigating
+                const formData = {
+                  firstName,
+                  lastName,
+                  username,
+                  email,
+                  password,
+                  confirmPassword
+                };
+                navigation.navigate('TermsAndConditions', { 
+                  fromSignup: true,
+                  formData: formData
+                });
+              }}
             >
               <View style={[styles.checkboxBox, agreeToTerms && styles.checkboxChecked]}>
                 {agreeToTerms && <CheckIcon size={16} color="white" />}
               </View>
               <Text style={styles.termsText}>
                 I Agree to the{' '}
-                <TouchableOpacity onPress={() => navigation.navigate('TermsAndConditions', { fromSignup: true })}>
+                <TouchableOpacity onPress={() => {
+                  const formData = {
+                    firstName,
+                    lastName,
+                    username,
+                    email,
+                    password,
+                    confirmPassword
+                  };
+                  navigation.navigate('TermsAndConditions', { 
+                    fromSignup: true,
+                    formData: formData
+                  });
+                }}>
                   <Text style={styles.linkText}>Terms of Service</Text>
                 </TouchableOpacity>
                 {' '}and{' '}
-                <TouchableOpacity onPress={() => navigation.navigate('TermsAndConditions', { fromSignup: true })}>
+                <TouchableOpacity onPress={() => {
+                  const formData = {
+                    firstName,
+                    lastName,
+                    username,
+                    email,
+                    password,
+                    confirmPassword
+                  };
+                  navigation.navigate('TermsAndConditions', { 
+                    fromSignup: true,
+                    formData: formData
+                  });
+                }}>
                   <Text style={styles.linkText}>Privacy Policy</Text>
                 </TouchableOpacity>
               </Text>
@@ -304,12 +534,22 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
           </View>
 
           <TouchableOpacity
-            style={[styles.createButton, !agreeToTerms && styles.createButtonDisabled]}
+            style={[styles.createButton, (!agreeToTerms || loading) && styles.createButtonDisabled]}
             onPress={handleCreateAccount}
-            disabled={!agreeToTerms}
+            disabled={!agreeToTerms || loading}
           >
-            <Text style={styles.createButtonText}>Create Account</Text>
+            {loading ? (
+              <ActivityIndicator color="white" size="small" />
+            ) : (
+              <Text style={styles.createButtonText}>Create Account</Text>
+            )}
           </TouchableOpacity>
+
+          {errors.general ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{errors.general}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.loginContainer}>
             <Text style={styles.loginText}>Already have an account? </Text>
@@ -495,6 +735,24 @@ const styles = StyleSheet.create({
   },
   strongText: {
     color: '#10B981',
+  },
+  inputError: {
+    borderColor: '#EF4444',
+    borderWidth: 1,
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    marginTop: 4,
+  },
+  errorContainer: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
   },
 });
 
