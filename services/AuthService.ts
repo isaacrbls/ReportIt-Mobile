@@ -2,6 +2,9 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   signOut,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   User,
   AuthError
 } from 'firebase/auth';
@@ -26,6 +29,18 @@ export class AuthService {
   static async signIn(email: string, password: string): Promise<AuthResult> {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Check if account needs reactivation (if it was deactivated)
+      console.log('Checking account status for user:', userCredential.user.uid);
+      const statusResult = await UserService.isAccountActive(userCredential.user.uid);
+      
+      if (statusResult.success && statusResult.data === false) {
+        // Account was deactivated, reactivate it
+        console.log('Account was deactivated, reactivating...');
+        await UserService.reactivateAccount(userCredential.user.uid);
+        console.log('Account reactivated successfully');
+      }
+      
       return {
         success: true,
         user: userCredential.user
@@ -191,6 +206,96 @@ export class AuthService {
         return 'Invalid email or password. Please check your credentials.';
       default:
         return error.message || 'An error occurred during authentication.';
+    }
+  }
+
+  /**
+   * Change user password
+   */
+  static async changePassword(currentPassword: string, newPassword: string): Promise<AuthResult> {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        return {
+          success: false,
+          error: 'No user is currently signed in'
+        };
+      }
+
+      // Re-authenticate user with current password
+      const credential = EmailAuthProvider.credential(user.email!, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+      
+      // Update password
+      await updatePassword(user, newPassword);
+      
+      console.log('Password updated successfully');
+      return {
+        success: true,
+        user: user
+      };
+    } catch (error: any) {
+      console.error('Error changing password:', error);
+      return {
+        success: false,
+        error: this.getPasswordChangeErrorMessage(error)
+      };
+    }
+  }
+
+  /**
+   * Deactivate current user account
+   */
+  static async deactivateAccount(): Promise<AuthResult> {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        return {
+          success: false,
+          error: 'No user is currently signed in'
+        };
+      }
+
+      // Deactivate in database
+      const result = await UserService.deactivateAccount(user.uid);
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Failed to deactivate account'
+        };
+      }
+
+      // Sign out the user after deactivation
+      await signOut(auth);
+      
+      console.log('Account deactivated successfully');
+      return {
+        success: true
+      };
+    } catch (error: any) {
+      console.error('Error deactivating account:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to deactivate account'
+      };
+    }
+  }
+
+  /**
+   * Convert password change errors to user-friendly messages
+   */
+  private static getPasswordChangeErrorMessage(error: AuthError): string {
+    switch (error.code) {
+      case 'auth/wrong-password':
+        return 'Current password is incorrect.';
+      case 'auth/weak-password':
+        return 'New password should be at least 6 characters long.';
+      case 'auth/requires-recent-login':
+        return 'For security reasons, please sign in again before changing your password.';
+      case 'auth/network-request-failed':
+        return 'Network error. Please check your connection.';
+      default:
+        return error.message || 'Failed to change password.';
     }
   }
 }

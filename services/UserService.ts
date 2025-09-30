@@ -10,6 +10,8 @@ export interface UserProfile {
   email: string;
   createdAt: string;
   updatedAt?: string;
+  isActive?: boolean;
+  deactivatedAt?: string;
 }
 
 export interface CreateUserProfileData {
@@ -70,6 +72,7 @@ export class UserService {
         username: profileData.username,
         email: profileData.email,
         createdAt: new Date().toISOString(),
+        isActive: true, // New accounts are active by default
       };
 
       const userRef = ref(database, `users/${user.uid}`);
@@ -227,6 +230,198 @@ export class UserService {
       return {
         success: false,
         error: error.message || 'Failed to reserve username'
+      };
+    }
+  }
+
+  /**
+   * Deactivate user account
+   */
+  static async deactivateAccount(uid: string): Promise<UserServiceResult> {
+    try {
+      console.log('Deactivating account for user:', uid);
+      
+      const userRef = ref(database, `users/${uid}`);
+      const updates = {
+        isActive: false,
+        deactivatedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      await update(userRef, updates);
+      
+      console.log('Account deactivated successfully');
+      return {
+        success: true
+      };
+    } catch (error: any) {
+      console.error('Error deactivating account:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to deactivate account'
+      };
+    }
+  }
+
+  /**
+   * Reactivate user account (called during login)
+   */
+  static async reactivateAccount(uid: string): Promise<UserServiceResult> {
+    try {
+      console.log('Reactivating account for user:', uid);
+      
+      const userRef = ref(database, `users/${uid}`);
+      const updates = {
+        isActive: true,
+        deactivatedAt: null,
+        updatedAt: new Date().toISOString()
+      };
+      
+      await update(userRef, updates);
+      
+      console.log('Account reactivated successfully');
+      return {
+        success: true
+      };
+    } catch (error: any) {
+      console.error('Error reactivating account:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to reactivate account'
+      };
+    }
+  }
+
+  /**
+   * Check if user account is active
+   */
+  static async isAccountActive(uid: string): Promise<UserServiceResult> {
+    try {
+      const userRef = ref(database, `users/${uid}`);
+      const snapshot = await get(userRef);
+      
+      if (snapshot.exists()) {
+        const userData = snapshot.val();
+        const isActive = userData.isActive !== false; // Default to true if not set
+        
+        return {
+          success: true,
+          data: isActive
+        };
+      } else {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+    } catch (error: any) {
+      console.error('Error checking account status:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to check account status'
+      };
+    }
+  }
+
+  /**
+   * Get current user's profile data
+   */
+  static async getCurrentUserProfile(): Promise<UserServiceResult> {
+    try {
+      // Get current user from Firebase Auth
+      const { auth } = await import('../config/firebase');
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        return {
+          success: false,
+          error: 'No user is currently signed in'
+        };
+      }
+
+      console.log('Fetching profile for current user:', currentUser.uid);
+      
+      // Get user profile from database
+      const userRef = ref(database, `users/${currentUser.uid}`);
+      const snapshot = await get(userRef);
+      
+      if (snapshot.exists()) {
+        const userData = snapshot.val() as UserProfile;
+        
+        // Combine Firebase Auth data with database profile data
+        const completeProfile: UserProfile = {
+          ...userData,
+          email: currentUser.email || userData.email, // Prefer Auth email (it's always current)
+          uid: currentUser.uid
+        };
+        
+        console.log('Successfully fetched user profile');
+        return {
+          success: true,
+          data: completeProfile
+        };
+      } else {
+        // If no profile in database, create basic profile from Auth data
+        console.log('No profile found in database, using Auth data');
+        const basicProfile: Partial<UserProfile> = {
+          uid: currentUser.uid,
+          email: currentUser.email || '',
+          firstName: '',
+          lastName: '',
+          username: '',
+          createdAt: new Date().toISOString(),
+          isActive: true
+        };
+        
+        return {
+          success: true,
+          data: basicProfile
+        };
+      }
+    } catch (error: any) {
+      console.error('Error getting current user profile:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to get user profile'
+      };
+    }
+  }
+
+  /**
+   * Update current user's profile data
+   */
+  static async updateCurrentUserProfile(updates: Partial<UserProfile>): Promise<UserServiceResult> {
+    try {
+      const { auth } = await import('../config/firebase');
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        return {
+          success: false,
+          error: 'No user is currently signed in'
+        };
+      }
+
+      console.log('Updating profile for user:', currentUser.uid);
+      
+      const userRef = ref(database, `users/${currentUser.uid}`);
+      const updateData = {
+        ...updates,
+        updatedAt: new Date().toISOString()
+      };
+      
+      await update(userRef, updateData);
+      
+      console.log('Profile updated successfully');
+      return {
+        success: true,
+        data: updateData
+      };
+    } catch (error: any) {
+      console.error('Error updating user profile:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to update profile'
       };
     }
   }
