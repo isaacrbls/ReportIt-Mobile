@@ -11,11 +11,15 @@ import {
   Modal,
   Image,
   Animated,
+  ScrollView,
 } from 'react-native';
 import FontAwesome from '@react-native-vector-icons/fontawesome';
 import { WebView } from 'react-native-webview';
+import * as ImagePicker from 'expo-image-picker';
+import { Camera } from 'expo-camera';
 import LocationService, { LocationCoords } from '../services/LocationService';
-import { ReportsService, Report, Hotspot } from '../services/ReportsService';
+import { ReportsService, Report, Hotspot, CreateReportData } from '../services/ReportsService';
+import { AuthService } from '../services/AuthService';
 import {
   useFonts,
   Poppins_400Regular,
@@ -68,6 +72,15 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
     </head>
     <body>
         <div id="map"></div>
+        
+        <!-- Image Modal for Enlarged View -->
+        <div id="imageModal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); justify-content: center; align-items: center;" onclick="closeImageModal()">
+            <div style="position: relative; max-width: 90%; max-height: 90%; text-align: center;">
+                <img id="modalImage" src="" style="max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);" onclick="event.stopPropagation()" />
+                <div style="position: absolute; top: 10px; right: 20px; color: white; font-size: 30px; font-weight: bold; cursor: pointer; background: rgba(0,0,0,0.5); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;" onclick="closeImageModal()">&times;</div>
+            </div>
+        </div>
+        
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script>
             // Initialize map with dynamic center location
@@ -122,7 +135,20 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                         
                         <div style="margin-bottom: 8px;">
                             <div style="font-size: 12px; color: #333; margin-bottom: 3px;">
-                                <strong>📅 Date & Time:</strong> <span style="color: #666;">${report.dateTime ? new Date(report.dateTime).toLocaleString() : 'Not specified'}</span>
+                                <strong>📅 Date & Time:</strong> <span style="color: #666;">${report.dateTime ? (() => {
+                                    const date = new Date(report.dateTime);
+                                    const options = { 
+                                        year: 'numeric' as const, 
+                                        month: 'long' as const, 
+                                        day: 'numeric' as const, 
+                                        hour: 'numeric' as const, 
+                                        minute: '2-digit' as const, 
+                                        second: '2-digit' as const, 
+                                        hour12: true, 
+                                        timeZone: 'UTC' 
+                                    };
+                                    return date.toLocaleDateString('en-US', options).replace(/,([^,]*)$/, ' at$1 UTC');
+                                })() : 'Not specified'}</span>
                             </div>
                         </div>
                         
@@ -152,6 +178,38 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                                 ${report.description || 'No description available'}
                             </div>
                         </div>
+                        
+                        ${report.mediaURL && report.mediaURL.length > 0 ? `
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #E5E7EB;">
+                            <div style="font-size: 11px; color: #333; margin-bottom: 6px;"><strong>📸 Media:</strong></div>
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap; max-height: 80px; overflow-y: auto;">
+                                ${report.mediaURL.split(';').slice(0, 3).map((url, index) => {
+                                    const isVideo = url.includes('video') || url.includes('.mp4') || url.includes('.mov');
+                                    return `
+                                    <div style="position: relative; width: 50px; height: 50px; border-radius: 4px; overflow: hidden; border: 1px solid #E5E7EB; cursor: pointer; transition: transform 0.2s;" 
+                                         onclick="${isVideo ? `window.open('${url}', '_blank')` : `openImageModal('${url}')`}"
+                                         onmouseover="this.style.transform='scale(1.05)'" 
+                                         onmouseout="this.style.transform='scale(1)'">
+                                        ${isVideo 
+                                            ? `<div style="width: 100%; height: 100%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; color: #666;">
+                                                <span style="font-size: 16px;">🎥</span>
+                                               </div>`
+                                            : `<img src="${url}" style="width: 100%; height: 100%; object-fit: cover;" 
+                                                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                                               <div style="display: none; width: 100%; height: 100%; background: #F3F4F6; align-items: center; justify-content: center; color: #666;">
+                                                <span style="font-size: 16px;">📷</span>
+                                               </div>`
+                                        }
+                                    </div>`;
+                                }).join('')}
+                                ${report.mediaURL.split(';').length > 3 ? `
+                                <div style="width: 50px; height: 50px; border-radius: 4px; background: #F3F4F6; display: flex; align-items: center; justify-content: center; border: 1px solid #E5E7EB;">
+                                    <span style="font-size: 10px; color: #666;">+${report.mediaURL.split(';').length - 3}</span>
+                                </div>` : ''}
+                            </div>
+                            <div style="font-size: 10px; color: #666; margin-top: 4px;">${report.mediaType || `${report.mediaURL.split(';').length} media file(s)`}</div>
+                        </div>
+                        ` : ''}
                         
                         ${report.submittedByEmail ? `
                         <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #E5E7EB;">
@@ -206,6 +264,25 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
             // Enable zoom on tap
             map.on('focus', function() { map.scrollWheelZoom.enable(); });
             map.on('blur', function() { map.scrollWheelZoom.disable(); });
+            
+            // Image Modal Functions
+            function openImageModal(imageUrl) {
+                const modal = document.getElementById('imageModal');
+                const modalImg = document.getElementById('modalImage');
+                modal.style.display = 'flex';
+                modalImg.src = imageUrl;
+            }
+            
+            function closeImageModal() {
+                document.getElementById('imageModal').style.display = 'none';
+            }
+            
+            // Close modal on Escape key
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape') {
+                    closeImageModal();
+                }
+            });
         </script>
     </body>
     </html>
@@ -251,6 +328,13 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
   const [isLoadingHotspots, setIsLoadingHotspots] = useState(false);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  
+  // Media-related state
+  const [selectedMedia, setSelectedMedia] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const [isMediaPickerVisible, setIsMediaPickerVisible] = useState(false);
+  const [cameraPermissionGranted, setCameraPermissionGranted] = useState(false);
+  
   const slideAnim = useRef(new Animated.Value(-280)).current;
 
   // Function to fetch reports from Firestore
@@ -349,14 +433,271 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       return;
     }
 
-    const isLoggedIn = true;
+    const currentUser = AuthService.getCurrentUser();
     
-    if (!isLoggedIn) {
+    if (!currentUser) {
       navigation.navigate('Login');
       return;
     }
 
     setIsReportModalVisible(true);
+  };
+
+  const handleSubmitReport = async () => {
+    if (!reportType.trim()) {
+      Alert.alert('Error', 'Please enter the type of incident');
+      return;
+    }
+
+    if (!reportDescription.trim()) {
+      Alert.alert('Error', 'Please provide a description of the incident');
+      return;
+    }
+
+    const currentUser = AuthService.getCurrentUser();
+    if (!currentUser) {
+      Alert.alert('Error', 'You must be logged in to submit a report');
+      return;
+    }
+
+    setIsSubmittingReport(true);
+
+    try {
+      // Get current location
+      console.log('📍 Getting current location for report...');
+      const locationService = LocationService.getInstance();
+      const currentLocation = await locationService.getCurrentLocation();
+
+      if (!currentLocation) {
+        Alert.alert('Error', 'Unable to get your current location. Please ensure location services are enabled.');
+        return;
+      }
+
+      console.log('📍 Current location obtained:', currentLocation);
+
+      // Prepare report data with current location
+      const reportData: CreateReportData = {
+        barangay: 'Pinagbakahan', // Default barangay - could be enhanced with reverse geocoding
+        description: reportDescription.trim(),
+        incidentType: reportType.trim(),
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+        submittedByEmail: currentUser.email || 'unknown@email.com'
+      };
+
+      // Add media information if any media is selected
+      if (selectedMedia.length > 0) {
+        const mediaTypes = selectedMedia.map(media => media.type).join(', ');
+        reportData.mediaType = `${selectedMedia.length} files: ${mediaTypes}`;
+        reportData.mediaURL = selectedMedia.map(media => media.uri).join(';');
+        
+        console.log('📸 Report includes media:', {
+          count: selectedMedia.length,
+          types: mediaTypes,
+          firstFile: selectedMedia[0].uri
+        });
+      }
+
+      console.log('📍 Report will be submitted with location:', {
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+        barangay: reportData.barangay
+      });
+
+      console.log('📝 Submitting report to Firestore:', reportData);
+
+      // Submit to Firestore
+      const result = await ReportsService.createReport(reportData);
+
+      if (result.success) {
+        console.log('✅ Report submitted successfully with ID:', result.reportId);
+        
+        // Close modal and clear form
+        setIsReportModalVisible(false);
+        setReportType('');
+        setReportDescription('');
+        setSelectedMedia([]); // Clear selected media
+        
+        // Show success message
+        Alert.alert(
+          'Success', 
+          'Your report has been submitted successfully and will be reviewed by authorities.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Refresh reports to show the new one
+                fetchReports();
+                fetchHotspots();
+              }
+            }
+          ]
+        );
+      } else {
+        console.error('❌ Failed to submit report:', result.error);
+        Alert.alert('Error', `Failed to submit report: ${result.error}`);
+      }
+    } catch (error: any) {
+      console.error('❌ Exception while submitting report:', error);
+      Alert.alert('Error', `Failed to submit report: ${error.message}`);
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
+  // Media picker functions
+  const requestCameraPermission = async () => {
+    try {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setCameraPermissionGranted(status === 'granted');
+      return status === 'granted';
+    } catch (error) {
+      console.error('Error requesting camera permission:', error);
+      return false;
+    }
+  };
+
+  const requestMediaLibraryPermission = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      return status === 'granted';
+    } catch (error) {
+      console.error('Error requesting media library permission:', error);
+      return false;
+    }
+  };
+
+  const showMediaPicker = () => {
+    Alert.alert(
+      'Select Media',
+      'Choose how you want to add media to your report',
+      [
+        { text: 'Camera', onPress: () => openCamera() },
+        { text: 'Gallery', onPress: () => openGallery() },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const openCamera = async () => {
+    const hasPermission = await requestCameraPermission();
+    if (!hasPermission) {
+      Alert.alert('Permission Denied', 'Camera access is required to take photos');
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        allowsMultipleSelection: false,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Check if adding this would exceed the limit
+        if (selectedMedia.length >= 5) {
+          Alert.alert('Limit Exceeded', 'You can only select up to 5 media files.');
+          return;
+        }
+        setSelectedMedia(prevMedia => [...prevMedia, ...result.assets]);
+        console.log('📷 Photo captured from camera:', result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error opening camera:', error);
+      Alert.alert('Error', 'Failed to open camera');
+    }
+  };
+
+  const openGallery = async () => {
+    const hasPermission = await requestMediaLibraryPermission();
+    if (!hasPermission) {
+      Alert.alert('Permission Denied', 'Gallery access is required to select media');
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: false,
+        quality: 0.8,
+        allowsMultipleSelection: false,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Check if adding this would exceed the limit
+        if (selectedMedia.length >= 5) {
+          Alert.alert('Limit Exceeded', 'You can only select up to 5 media files.');
+          return;
+        }
+        
+        setSelectedMedia(prevMedia => [...prevMedia, ...result.assets]);
+        console.log('🎥 Video selected from gallery:', result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error opening gallery:', error);
+      Alert.alert('Error', 'Failed to open gallery');
+    }
+  };
+
+  const openVideoOptions = () => {
+    Alert.alert(
+      'Select Video',
+      'Choose how you want to add video to your report',
+      [
+        { text: 'Record Video', onPress: () => recordVideo() },
+        { text: 'Choose from Gallery', onPress: () => openGallery() },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const recordVideo = async () => {
+    const hasPermission = await requestCameraPermission();
+    if (!hasPermission) {
+      Alert.alert('Permission Denied', 'Camera access is required to record videos');
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: true,
+        quality: 0.8,
+        videoMaxDuration: 30, // 30 seconds max
+        allowsMultipleSelection: false,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Check if adding this would exceed the limit
+        if (selectedMedia.length >= 5) {
+          Alert.alert('Limit Exceeded', 'You can only select up to 5 media files.');
+          return;
+        }
+        setSelectedMedia(prevMedia => [...prevMedia, ...result.assets]);
+        console.log('🎥 Video recorded from camera:', result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error recording video:', error);
+      Alert.alert('Error', 'Failed to record video');
+    }
+  };
+
+  const removeMedia = (index: number) => {
+    setSelectedMedia(prevMedia => prevMedia.filter((_, i) => i !== index));
+  };
+
+  const clearAllMedia = () => {
+    setSelectedMedia([]);
+  };
+
+  const handleCloseReportModal = () => {
+    // Clear all form data including media when modal is closed
+    setReportType('');
+    setReportDescription('');
+    setSelectedMedia([]);
+    setIsReportModalVisible(false);
   };
 
   const handleNotificationPress = () => {
@@ -656,14 +997,31 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         animationType="slide"
         transparent={true}
         visible={isReportModalVisible}
-        onRequestClose={() => setIsReportModalVisible(false)}
+        onRequestClose={handleCloseReportModal}
       >
         <View style={styles.reportModalOverlay}>
           <View style={styles.reportModal}>
             <Text style={styles.reportModalTitle}>Report Form</Text>
             <Text style={styles.reportModalSubtitle}>Detail of report</Text>
             
-            <View style={styles.reportForm}>
+            <ScrollView 
+              style={styles.reportScrollView}
+              contentContainerStyle={styles.reportModalScrollContainer}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              {/* Location Display */}
+              <View style={styles.locationDisplay}>
+                <FontAwesome name="map-marker" size={16} color="#EF4444" />
+                <Text style={styles.locationText}>
+                  {userLocation 
+                    ? `📍 Location: ${userLocation.latitude.toFixed(6)}, ${userLocation.longitude.toFixed(6)}`
+                    : '📍 Getting your location...'
+                  }
+                </Text>
+              </View>
+              
+              <View style={styles.reportForm}>
               <Text style={styles.reportLabel}>Type of incident</Text>
               <TextInput
                 style={styles.reportInput}
@@ -686,36 +1044,87 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
 
               <Text style={styles.reportLabel}>Add Media</Text>
               <View style={styles.mediaButtons}>
-                <TouchableOpacity style={styles.mediaButton}>
+                <TouchableOpacity 
+                  style={styles.mediaButton}
+                  onPress={() => openCamera()}
+                >
                   <View style={styles.mediaIcon}>
                     <FontAwesome name="camera" size={24} color="white" />
                   </View>
                   <Text style={styles.mediaButtonText}>Photo</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.mediaButton}>
+                <TouchableOpacity 
+                  style={styles.mediaButton}
+                  onPress={() => openVideoOptions()}
+                >
                   <View style={styles.mediaIcon}>
                     <FontAwesome name="video-camera" size={24} color="white" />
                   </View>
                   <Text style={styles.mediaButtonText}>Video</Text>
                 </TouchableOpacity>
               </View>
+              {selectedMedia.length > 0 && (
+                <TouchableOpacity 
+                  style={styles.clearAllMediaButton}
+                  onPress={clearAllMedia}
+                >
+                  <Text style={styles.clearAllMediaText}>Clear All Media ({selectedMedia.length})</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Media Preview */}
+              {selectedMedia.length > 0 && (
+                <View style={styles.mediaPreview}>
+                  <Text style={styles.mediaPreviewTitle}>
+                    Selected Media ({selectedMedia.length}/5)
+                  </Text>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.mediaPreviewScroll}
+                  >
+                    {selectedMedia.map((media, index) => (
+                      <View key={index} style={styles.mediaPreviewItem}>
+                        {media.type === 'image' ? (
+                          <Image 
+                            source={{ uri: media.uri }} 
+                            style={styles.mediaPreviewImage} 
+                          />
+                        ) : (
+                          <View style={styles.videoPreviewContainer}>
+                            <FontAwesome name="video-camera" size={30} color="#666" />
+                            <Text style={styles.videoPreviewText}>Video</Text>
+                          </View>
+                        )}
+                        <TouchableOpacity 
+                          style={styles.removeMediaButton}
+                          onPress={() => removeMedia(index)}
+                        >
+                          <FontAwesome name="times-circle" size={20} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
             </View>
+            </ScrollView>
 
             <View style={styles.reportModalButtons}>
               <TouchableOpacity 
                 style={styles.backButton}
-                onPress={() => setIsReportModalVisible(false)}
+                onPress={handleCloseReportModal}
               >
                 <Text style={styles.backButtonText}>Back</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.submitButton}
-                onPress={() => {
-                  setIsReportModalVisible(false);
-                  Alert.alert('Success', 'Report submitted successfully');
-                }}
+                style={[styles.submitButton, isSubmittingReport && styles.disabledButton]}
+                onPress={handleSubmitReport}
+                disabled={isSubmittingReport}
               >
-                <Text style={styles.submitButtonText}>Submit Report</Text>
+                <Text style={styles.submitButtonText}>
+                  {isSubmittingReport ? 'Submitting...' : 'Submit Report'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1012,8 +1421,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 24,
-    maxHeight: '90%',
+    height: '85%',
+    paddingTop: 24,
+    paddingHorizontal: 24,
+    display: 'flex',
+    flexDirection: 'column',
   },
   reportModalTitle: {
     fontSize: 16,
@@ -1030,6 +1442,14 @@ const styles = StyleSheet.create({
   },
   reportForm: {
     marginBottom: 24,
+  },
+  reportScrollView: {
+    flex: 1,
+    marginBottom: 16,
+  },
+  reportModalScrollContainer: {
+    paddingBottom: 20,
+    flexGrow: 1,
   },
   reportLabel: {
     fontSize: 14,
@@ -1076,9 +1496,77 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontWeight: '500',
   },
+  clearMediaButton: {
+    backgroundColor: '#F3F4F6',
+  },
+  clearAllMediaButton: {
+    backgroundColor: '#EF4444',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  clearAllMediaText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  mediaPreview: {
+    marginTop: 16,
+  },
+  mediaPreviewTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  mediaPreviewScroll: {
+    maxHeight: 100,
+  },
+  mediaPreviewItem: {
+    width: 80,
+    height: 80,
+    marginRight: 8,
+    position: 'relative',
+  },
+  mediaPreviewImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  videoPreviewContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  videoPreviewText: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 4,
+  },
+  removeMediaButton: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: 'white',
+    borderRadius: 10,
+  },
   reportModalButtons: {
     flexDirection: 'row',
     gap: 12,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 12,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
   backButton: {
     flex: 1,
@@ -1104,6 +1592,23 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  locationDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  locationText: {
+    fontSize: 12,
+    color: '#6B7280',
+    flex: 1,
   },
 });
 
