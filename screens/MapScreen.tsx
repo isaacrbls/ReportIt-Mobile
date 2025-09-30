@@ -15,6 +15,7 @@ import {
 import FontAwesome from '@react-native-vector-icons/fontawesome';
 import { WebView } from 'react-native-webview';
 import LocationService, { LocationCoords } from '../services/LocationService';
+import { ReportsService, Report, Hotspot } from '../services/ReportsService';
 import {
   useFonts,
   Poppins_400Regular,
@@ -24,7 +25,7 @@ import {
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-const MapView = ({ userLocation }: { userLocation: LocationCoords | null }) => {
+const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCoords | null; reports: Report[]; hotspots: Hotspot[] }) => {
   const mapWidth = screenWidth;
   const mapHeight = screenHeight - 200;
 
@@ -88,12 +89,116 @@ const MapView = ({ userLocation }: { userLocation: LocationCoords | null }) => {
                 className: 'custom-user-pin'
             });
 
+            // Custom ReportIT pin with exclamation point
+            var reportIcon = L.divIcon({
+                html: '<div style="position: relative; width: 32px; height: 40px;"><div style="width: 32px; height: 32px; background: linear-gradient(135deg, #FF6B35, #EF4444); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid white; box-shadow: 0 3px 8px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center;"><div style="transform: rotate(45deg); color: white; font-weight: bold; font-size: 16px; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">!</div></div></div>',
+                iconSize: [32, 40],
+                iconAnchor: [16, 35],
+                className: 'custom-reportit-pin'
+            });
+
             // User location marker (only show if location is available)
             ${userLocation ? `
             L.marker([${userLocation.latitude}, ${userLocation.longitude}], {icon: userIcon})
                 .addTo(map)
                 .bindPopup('<div style="font-weight: bold; color: #EF4444;">Your Current Location</div>');
             ` : ''}
+
+            // Add report markers
+            ${reports.map(report => `
+            L.marker([${report.geoLocation.latitude}, ${report.geoLocation.longitude}], {icon: reportIcon})
+                .addTo(map)
+                .bindPopup(\`
+                    <div style="max-width: 280px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 4px;">
+                        <div style="font-weight: bold; color: #FF6B35; font-size: 14px; margin-bottom: 12px; border-bottom: 2px solid #FF6B35; padding-bottom: 6px;">
+                            📍 ${report.incidentType || 'Incident Report'}
+                        </div>
+                        
+                        <div style="margin-bottom: 8px;">
+                            <div style="font-size: 12px; color: #333; margin-bottom: 3px;">
+                                <strong>🏘️ Barangay:</strong> <span style="color: #666;">${report.barangay || 'Not specified'}</span>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom: 8px;">
+                            <div style="font-size: 12px; color: #333; margin-bottom: 3px;">
+                                <strong>📅 Date & Time:</strong> <span style="color: #666;">${report.dateTime ? new Date(report.dateTime).toLocaleString() : 'Not specified'}</span>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom: 8px;">
+                            <div style="font-size: 12px; color: #333; margin-bottom: 3px;">
+                                <strong>🚨 Incident Type:</strong> <span style="color: #666;">${report.incidentType || 'Not specified'}</span>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom: 10px;">
+                            <div style="font-size: 12px; color: #333; margin-bottom: 3px;">
+                                <strong>📊 Status:</strong> 
+                                <span style="
+                                    color: white; 
+                                    background-color: ${report.status === 'Verified' ? '#22C55E' : report.status === 'Pending' ? '#F59E0B' : '#EF4444'}; 
+                                    padding: 2px 6px; 
+                                    border-radius: 10px; 
+                                    font-size: 11px;
+                                    margin-left: 4px;
+                                ">${report.status || 'Unknown'}</span>
+                            </div>
+                        </div>
+                        
+                        <div style="border-top: 1px solid #E5E7EB; padding-top: 8px;">
+                            <div style="font-size: 11px; color: #333; margin-bottom: 3px;"><strong>📝 Description:</strong></div>
+                            <div style="font-size: 11px; color: #666; line-height: 1.4; max-height: 60px; overflow-y: auto;">
+                                ${report.description || 'No description available'}
+                            </div>
+                        </div>
+                        
+                        ${report.submittedByEmail ? `
+                        <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #E5E7EB;">
+                            <div style="font-size: 10px; color: #999;">Reported by: ${report.submittedByEmail}</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                \`);
+            `).join('')}
+
+            // Add hotspot circles
+            ${hotspots.map(hotspot => `
+            L.circle([${hotspot.lat}, ${hotspot.lng}], {
+                color: '${hotspot.riskLevel === 'high' ? '#DC2626' : hotspot.riskLevel === 'medium' ? '#F59E0B' : '#10B981'}',
+                fillColor: '${hotspot.riskLevel === 'high' ? '#DC2626' : hotspot.riskLevel === 'medium' ? '#F59E0B' : '#10B981'}',
+                fillOpacity: 0.2,
+                weight: 3,
+                radius: ${hotspot.radius}
+            }).addTo(map)
+                .bindPopup(\`
+                    <div style="max-width: 250px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 4px;">
+                        <div style="font-weight: bold; color: ${hotspot.riskLevel === 'high' ? '#DC2626' : hotspot.riskLevel === 'medium' ? '#F59E0B' : '#10B981'}; font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                            🔥 ${hotspot.riskLevel.toUpperCase()} RISK HOTSPOT
+                        </div>
+                        <div style="font-size: 12px; color: #333; margin-bottom: 4px;">
+                            <strong>📍 Location:</strong> ${hotspot.barangay || 'Multiple Areas'}
+                        </div>
+                        <div style="font-size: 12px; color: #333; margin-bottom: 4px;">
+                            <strong>📊 Incident Count:</strong> ${hotspot.incidentCount} verified reports
+                        </div>
+                        <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
+                            <strong>⚠️ Risk Level:</strong> 
+                            <span style="
+                                background: ${hotspot.riskLevel === 'high' ? '#DC2626' : hotspot.riskLevel === 'medium' ? '#F59E0B' : '#10B981'}; 
+                                color: white; 
+                                padding: 2px 6px; 
+                                border-radius: 8px; 
+                                font-size: 10px; 
+                                margin-left: 4px;
+                            ">${hotspot.riskLevel.toUpperCase()}</span>
+                        </div>
+                        <div style="font-size: 11px; color: #666; border-top: 1px solid #E5E7EB; padding-top: 6px;">
+                            This area has multiple verified incidents clustered together. Exercise caution when in this vicinity.
+                        </div>
+                    </div>
+                \`);
+            `).join('')}
 
             // Disable scroll zoom initially to prevent conflicts with app scrolling
             map.scrollWheelZoom.disable();
@@ -142,7 +247,73 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   const [reportType, setReportType] = useState('');
   const [reportDescription, setReportDescription] = useState('');
   const [isUserLoggedIn, setIsUserLoggedIn] = useState(false);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [isLoadingReports, setIsLoadingReports] = useState(false);
+  const [hotspots, setHotspots] = useState<Hotspot[]>([]);
+  const [isLoadingHotspots, setIsLoadingHotspots] = useState(false);
   const slideAnim = useRef(new Animated.Value(-280)).current;
+
+  // Function to fetch reports from Firestore
+  const fetchReports = async () => {
+    setIsLoadingReports(true);
+    console.log('Starting to fetch reports from Firestore...');
+    try {
+      const result = await ReportsService.getAllReports();
+      if (result.success && result.data) {
+        setReports(result.data);
+        console.log(`✅ Successfully loaded ${result.data.length} reports from Firestore`);
+        
+        // Log sample report for debugging with all requested fields
+        if (result.data.length > 0) {
+          const sample = result.data[0];
+          console.log('📋 Sample Report Details:', {
+            id: sample.id,
+            barangay: sample.barangay,
+            dateTime: sample.dateTime,
+            description: sample.description,
+            incidentType: sample.incidentType,
+            status: sample.status,
+            coordinates: `${sample.geoLocation.latitude}, ${sample.geoLocation.longitude}`,
+            submittedBy: sample.submittedByEmail
+          });
+        }
+        
+        // Show summary of all reports
+        const reportsWithAllFields = result.data.filter(r => 
+          r.barangay && r.dateTime && r.description && r.incidentType && r.status
+        );
+        console.log(`📊 Reports with complete data: ${reportsWithAllFields.length}/${result.data.length}`);
+      } else {
+        console.error('❌ Failed to fetch reports:', result.error);
+        Alert.alert('Error', `Failed to load reports: ${result.error}`);
+      }
+    } catch (error: any) {
+      console.error('❌ Exception while fetching reports:', error);
+      Alert.alert('Error', `Failed to load reports: ${error.message}`);
+    } finally {
+      setIsLoadingReports(false);
+    }
+  };
+
+  // Function to fetch hotspots
+  const fetchHotspots = async () => {
+    setIsLoadingHotspots(true);
+    console.log('🔥 Starting to calculate hotspots...');
+    try {
+      const result = await ReportsService.calculateHotspots();
+      if (result.success && result.data) {
+        setHotspots(result.data);
+        console.log(`🔥 Successfully calculated ${result.data.length} hotspots`);
+      } else {
+        console.error('❌ Failed to calculate hotspots:', result.error);
+        // Don't show alert for hotspot errors - it's a secondary feature
+      }
+    } catch (error: any) {
+      console.error('❌ Exception while calculating hotspots:', error);
+    } finally {
+      setIsLoadingHotspots(false);
+    }
+  };
 
   // Request location permission and get current location on component mount
   useEffect(() => {
@@ -166,6 +337,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     };
 
     initializeLocation();
+    fetchReports(); // Load reports when component mounts
+    fetchHotspots(); // Load hotspots when component mounts
   }, [fontsLoaded]);
 
   const handleReportPress = async () => {
@@ -265,6 +438,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         >
           <FontAwesome name="bars" size={22} color="white" />
         </TouchableOpacity>
+        
+        <Text style={styles.headerTitle}>ReportIT Map</Text>
+        
+        <View style={styles.headerStatus}>
+          <View style={styles.reportsStatus}>
+            <Text style={styles.reportsStatusText}>
+              {(isLoadingReports || isLoadingHotspots) ? 'Loading...' : `${reports.length} Reports`}
+            </Text>
+          </View>
+          {hotspots.length > 0 && (
+            <View style={[styles.reportsStatus, { backgroundColor: 'rgba(255, 107, 53, 0.3)', marginTop: 4 }]}>
+              <Text style={styles.reportsStatusText}>
+                🔥 {hotspots.length} Hotspots
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
 
       <View style={styles.searchContainer}>
@@ -281,10 +471,24 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       </View>
 
       <View style={styles.mapContainer}>
-        <MapView userLocation={userLocation} />
+        <MapView userLocation={userLocation} reports={reports} hotspots={hotspots} />
       </View>
 
       <View style={styles.fabContainer}>
+        <TouchableOpacity 
+          style={[styles.fab, (isLoadingReports || isLoadingHotspots) && styles.fabDisabled]} 
+          onPress={() => {
+            fetchReports();
+            fetchHotspots();
+          }}
+          disabled={isLoadingReports || isLoadingHotspots}
+        >
+          <FontAwesome 
+            name={(isLoadingReports || isLoadingHotspots) ? "spinner" : "refresh"} 
+            size={18} 
+            color={(isLoadingReports || isLoadingHotspots) ? "#9CA3AF" : "#6B7280"} 
+          />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.fab} onPress={handleLocationPress}>
           <FontAwesome name="crosshairs" size={22} color="#6B7280" />
         </TouchableOpacity>
@@ -561,6 +765,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Poppins_600SemiBold',
   },
+  reportsStatus: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  reportsStatusText: {
+    color: 'white',
+    fontSize: 11,
+    fontFamily: 'Poppins_400Regular',
+  },
   searchContainer: {
     position: 'absolute',
     top: 90,
@@ -619,6 +834,9 @@ const styles = StyleSheet.create({
   },
   fabDanger: {
     backgroundColor: '#EF4444',
+  },
+  fabDisabled: {
+    opacity: 0.6,
   },
   bottomNav: {
     flexDirection: 'row',
