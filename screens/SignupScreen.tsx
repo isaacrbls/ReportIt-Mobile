@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  Modal,
+  FlatList,
+  BackHandler,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import {
@@ -20,6 +23,8 @@ import {
 } from '@expo-google-fonts/poppins';
 import { AuthService, SignupData } from '../services/AuthService';
 import { UserService } from '../services/UserService';
+import { BULACAN_CITIES, getAllBarangays, isReportingAllowed } from '../utils/BulacanBarangays';
+import { NavigationHelper } from '../utils/NavigationHelper';
 
 
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
@@ -118,6 +123,9 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [selectedBarangay, setSelectedBarangay] = useState('');
+  const [selectedCity, setSelectedCity] = useState('');
+  const [isBarangayModalVisible, setIsBarangayModalVisible] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({
@@ -127,10 +135,30 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
     email: '',
     password: '',
     confirmPassword: '',
+    barangay: '',
     terms: '',
     general: ''
   });
 
+
+  // Handle hardware back button with modal priority and logical navigation
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Priority 1: Close modal if visible
+      if (isBarangayModalVisible) {
+        setIsBarangayModalVisible(false);
+        return true; // Prevent default back behavior
+      }
+      
+      // Priority 2: Use logical navigation
+      const context = NavigationHelper.createContext('Signup', route?.params?.fromTerms ? 'TermsAndConditions' : undefined);
+      const handled = NavigationHelper.handleBackNavigation(navigation, 'Signup', context);
+      
+      return handled;
+    });
+
+    return () => backHandler.remove();
+  }, [isBarangayModalVisible, navigation, route]);
 
   React.useEffect(() => {
     if (route?.params?.termsAccepted === true) {
@@ -190,6 +218,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
       email: '',
       password: '',
       confirmPassword: '',
+      barangay: '',
       terms: '',
       general: ''
     };
@@ -246,6 +275,12 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
       isValid = false;
     }
 
+    // Barangay validation
+    if (!selectedBarangay) {
+      newErrors.barangay = 'Please select your barangay';
+      isValid = false;
+    }
+
     // Terms validation
     if (!agreeToTerms) {
       newErrors.terms = 'You must agree to the terms and conditions';
@@ -277,7 +312,9 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
         lastName: lastName.trim(),
         username: username.trim().toLowerCase(),
         email: email.trim().toLowerCase(),
-        password: password
+        password: password,
+        barangay: selectedBarangay,
+        city: selectedCity
       };
 
       console.log('Starting signup with data:', { ...signupData, password: '[HIDDEN]' });
@@ -306,6 +343,15 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
       Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBarangaySelect = (barangay: string, city: string) => {
+    setSelectedBarangay(barangay);
+    setSelectedCity(city);
+    setIsBarangayModalVisible(false);
+    if (errors.barangay) {
+      setErrors(prev => ({ ...prev, barangay: '' }));
     }
   };
 
@@ -407,6 +453,23 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
           </View>
 
           <View style={styles.inputGroup}>
+            <Text style={styles.label}>Barangay</Text>
+            <TouchableOpacity
+              style={[styles.input, styles.pickerButton, errors.barangay ? styles.inputError : null]}
+              onPress={() => !loading && setIsBarangayModalVisible(true)}
+              disabled={loading}
+            >
+              <Text style={[
+                styles.pickerText, 
+                selectedBarangay ? styles.selectedText : { color: '#9CA3AF' }
+              ]}>
+                {selectedBarangay ? `${selectedBarangay}, ${selectedCity}` : 'Select your barangay'}
+              </Text>
+            </TouchableOpacity>
+            {errors.barangay ? <Text style={styles.errorText}>{errors.barangay}</Text> : null}
+          </View>
+
+          <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
             <View style={[styles.passwordContainer, errors.password ? styles.inputError : null]}>
               <TextInput
@@ -494,8 +557,8 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
               <View style={[styles.checkboxBox, agreeToTerms && styles.checkboxChecked]}>
                 {agreeToTerms && <CheckIcon size={16} color="white" />}
               </View>
-              <Text style={styles.termsText}>
-                I Agree to the{' '}
+              <View style={styles.termsTextContainer}>
+                <Text style={styles.termsText}>I Agree to the </Text>
                 <TouchableOpacity onPress={() => {
                   const formData = {
                     firstName,
@@ -512,7 +575,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                 }}>
                   <Text style={styles.linkText}>Terms of Service</Text>
                 </TouchableOpacity>
-                {' '}and{' '}
+                <Text style={styles.termsText}> and </Text>
                 <TouchableOpacity onPress={() => {
                   const formData = {
                     firstName,
@@ -529,7 +592,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                 }}>
                   <Text style={styles.linkText}>Privacy Policy</Text>
                 </TouchableOpacity>
-              </Text>
+              </View>
             </TouchableOpacity>
           </View>
 
@@ -559,6 +622,48 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Barangay Selection Modal */}
+      <Modal
+        visible={isBarangayModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsBarangayModalVisible(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalContent}>
+            <View style={modalStyles.modalHeader}>
+              <Text style={modalStyles.modalTitle}>Select Your Barangay</Text>
+              <TouchableOpacity
+                onPress={() => setIsBarangayModalVisible(false)}
+                style={modalStyles.closeButton}
+              >
+                <Text style={modalStyles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={BULACAN_CITIES}
+              keyExtractor={(item) => item.name}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item: city }) => (
+                <View style={modalStyles.citySection}>
+                  <Text style={modalStyles.cityName}>{city.name}</Text>
+                  {city.barangays.map((barangay) => (
+                    <TouchableOpacity
+                      key={`${city.name}-${barangay.name}`}
+                      style={modalStyles.barangayItem}
+                      onPress={() => handleBarangaySelect(barangay.name, city.name)}
+                    >
+                      <Text style={modalStyles.barangayText}>{barangay.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -666,14 +771,20 @@ const styles = StyleSheet.create({
     marginRight: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
+    marginTop: 0,
   },
   checkboxChecked: {
     backgroundColor: '#EF4444',
     borderColor: '#EF4444',
   },
-  termsText: {
+  termsTextContainer: {
     flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    marginTop: 1,
+  },
+  termsText: {
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: '#6B7280',
@@ -753,6 +864,82 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
+  },
+  pickerButton: {
+    justifyContent: 'center',
+  },
+  pickerText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_400Regular',
+  },
+  selectedText: {
+    color: '#111827',
+  },
+});
+
+const modalStyles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    margin: 20,
+    maxHeight: '80%',
+    width: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#111827',
+  },
+  closeButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 18,
+    color: '#6B7280',
+    fontFamily: 'Poppins_400Regular',
+  },
+  citySection: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  cityName: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#EF4444',
+    marginBottom: 8,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  barangayItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginVertical: 2,
+  },
+  barangayText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#374151',
   },
 });
 

@@ -9,9 +9,13 @@ import {
   StatusBar,
   ScrollView,
   Alert,
+  Image,
+  ActionSheetIOS,
+  Platform,
 } from 'react-native';
 import { NavigationProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/FontAwesome';
+import * as ImagePicker from 'expo-image-picker';
 import { AuthService } from '../services/AuthService';
 import { UserService, UserProfile } from '../services/UserService';
 
@@ -34,6 +38,10 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ navigation }) => 
   const [isDeactivating, setIsDeactivating] = useState(false);
   const [isLoadingUserData, setIsLoadingUserData] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  
+  // Profile picture states
+  const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // Load current user data when component mounts
   useEffect(() => {
@@ -51,11 +59,13 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ navigation }) => 
         setUserProfile(profile);
         setCurrentEmail(profile.email || '');
         setCurrentUsername(profile.username || '');
+        setProfileImageUri(profile.profilePictureURL || null);
         console.log('✅ User profile loaded successfully:', {
           email: profile.email,
           username: profile.username,
           firstName: profile.firstName,
-          lastName: profile.lastName
+          lastName: profile.lastName,
+          profilePictureURL: profile.profilePictureURL
         });
       } else {
         console.error('❌ Failed to load user profile:', result.error);
@@ -67,6 +77,157 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ navigation }) => 
     } finally {
       setIsLoadingUserData(false);
     }
+  };
+
+  const requestPermissions = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please enable gallery access to select profile picture');
+      return false;
+    }
+
+    const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
+    if (cameraStatus.status !== 'granted') {
+      Alert.alert('Permission Required', 'Please enable camera access to take profile picture');
+      return false;
+    }
+
+    return true;
+  };
+
+  const showImagePicker = async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Take Photo', 'Choose from Gallery', 'Remove Photo'],
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: profileImageUri ? 3 : -1,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            openCamera();
+          } else if (buttonIndex === 2) {
+            openGallery();
+          } else if (buttonIndex === 3 && profileImageUri) {
+            removeProfilePicture();
+          }
+        }
+      );
+    } else {
+      // Android alert
+      const options: any[] = [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Take Photo', onPress: openCamera },
+        { text: 'Choose from Gallery', onPress: openGallery },
+      ];
+      
+      if (profileImageUri) {
+        options.push({ text: 'Remove Photo', onPress: removeProfilePicture, style: 'destructive' });
+      }
+      
+      Alert.alert('Profile Picture', 'Choose an option', options);
+    }
+  };
+
+  const openCamera = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        await uploadProfilePicture(imageUri);
+      }
+    } catch (error: any) {
+      console.error('Error opening camera:', error);
+      Alert.alert('Error', 'Failed to open camera');
+    }
+  };
+
+  const openGallery = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        await uploadProfilePicture(imageUri);
+      }
+    } catch (error: any) {
+      console.error('Error opening gallery:', error);
+      Alert.alert('Error', 'Failed to open gallery');
+    }
+  };
+
+  const uploadProfilePicture = async (imageUri: string) => {
+    setIsUploadingImage(true);
+    try {
+      console.log('Uploading profile picture...');
+      const result = await UserService.uploadProfilePicture(imageUri);
+      
+      if (result.success && result.data) {
+        setProfileImageUri(result.data.profilePictureURL);
+        Alert.alert('Success', 'Profile picture updated successfully');
+        
+        // Reload user data to get updated profile
+        await loadUserData();
+      } else {
+        console.error('Failed to upload profile picture:', result.error);
+        Alert.alert('Error', result.error || 'Failed to upload profile picture');
+      }
+    } catch (error: any) {
+      console.error('Error uploading profile picture:', error);
+      Alert.alert('Error', 'Failed to upload profile picture');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const removeProfilePicture = async () => {
+    Alert.alert(
+      'Remove Profile Picture',
+      'Are you sure you want to remove your profile picture?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setIsUploadingImage(true);
+            try {
+              const result = await UserService.deleteProfilePicture();
+              
+              if (result.success) {
+                setProfileImageUri(null);
+                Alert.alert('Success', 'Profile picture removed successfully');
+                
+                // Reload user data to get updated profile
+                await loadUserData();
+              } else {
+                console.error('Failed to remove profile picture:', result.error);
+                Alert.alert('Error', result.error || 'Failed to remove profile picture');
+              }
+            } catch (error: any) {
+              console.error('Error removing profile picture:', error);
+              Alert.alert('Error', 'Failed to remove profile picture');
+            } finally {
+              setIsUploadingImage(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleSaveChanges = async () => {
@@ -181,11 +342,33 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ navigation }) => 
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Profile Icon */}
+        {/* Profile Picture Section */}
         <View style={styles.profileSection}>
-          <View style={styles.profileIcon}>
-            <Icon name="user" size={24} color="#EF4444" />
-          </View>
+          <TouchableOpacity 
+            style={styles.profileImageContainer} 
+            onPress={showImagePicker}
+            disabled={isUploadingImage}
+          >
+            {profileImageUri ? (
+              <Image 
+                source={{ uri: profileImageUri }} 
+                style={styles.profileImage}
+              />
+            ) : (
+              <View style={styles.profileIcon}>
+                <Icon name="user" size={40} color="#EF4444" />
+              </View>
+            )}
+            {isUploadingImage && (
+              <View style={styles.uploadingOverlay}>
+                <Text style={styles.uploadingText}>Uploading...</Text>
+              </View>
+            )}
+            <View style={styles.cameraIcon}>
+              <Icon name="camera" size={14} color="white" />
+            </View>
+          </TouchableOpacity>
+          
           <Text style={styles.title}>
             {isLoadingUserData ? 'Loading...' : 
              userProfile && (userProfile.firstName || userProfile.lastName) ? 
@@ -193,8 +376,13 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ navigation }) => 
              'Edit Profile'}
           </Text>
           <Text style={styles.subtitle}>
-            {isLoadingUserData ? 'Please wait...' : 'Update your password and account settings'}
+            {isLoadingUserData ? 'Please wait...' : 'Update your profile picture and account settings'}
           </Text>
+          <TouchableOpacity onPress={showImagePicker} disabled={isUploadingImage}>
+            <Text style={styles.changePhotoText}>
+              {profileImageUri ? 'Change Photo' : 'Add Photo'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Form */}
@@ -462,6 +650,52 @@ const styles = StyleSheet.create({
   readOnlyInput: {
     backgroundColor: '#F9FAFB',
     color: '#6B7280',
+  },
+  profileImageContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  profileImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: '#EF4444',
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadingText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cameraIcon: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  changePhotoText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 8,
   },
 });
 

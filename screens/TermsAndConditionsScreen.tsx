@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  BackHandler,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import {
@@ -15,6 +16,7 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
+import { NavigationHelper } from '../utils/NavigationHelper';
 
 
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
@@ -53,6 +55,27 @@ const TermsAndConditionsScreen: React.FC<TermsAndConditionsScreenProps> = ({ nav
     Poppins_600SemiBold,
     Poppins_700Bold,
   });
+
+  // Handle hardware back button using logical navigation
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      const context = NavigationHelper.createContext('TermsAndConditions', 'Signup');
+      const handled = NavigationHelper.handleBackNavigation(
+        navigation, 
+        'TermsAndConditions', 
+        context,
+        { 
+          termsAccepted: false,
+          formData: route?.params?.formData,
+          fromTerms: true
+        }
+      );
+      
+      return handled;
+    });
+
+    return () => backHandler.remove();
+  }, [navigation, route]);
 
   if (!fontsLoaded) {
     return null;

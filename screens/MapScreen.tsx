@@ -12,6 +12,7 @@ import {
   Image,
   Animated,
   ScrollView,
+  BackHandler,
 } from 'react-native';
 import FontAwesome from '@react-native-vector-icons/fontawesome';
 import { WebView } from 'react-native-webview';
@@ -20,6 +21,9 @@ import { Camera } from 'expo-camera';
 import LocationService, { LocationCoords } from '../services/LocationService';
 import { ReportsService, Report, Hotspot, CreateReportData } from '../services/ReportsService';
 import { AuthService } from '../services/AuthService';
+import { UserService } from '../services/UserService';
+import { isReportingAllowed } from '../utils/BulacanBarangays';
+import { NavigationHelper } from '../utils/NavigationHelper';
 import {
   useFonts,
   Poppins_400Regular,
@@ -43,7 +47,6 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <title>ReportIT Map</title>
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
         <style>
@@ -124,18 +127,18 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                 .bindPopup(\`
                     <div style="max-width: 280px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 4px;">
                         <div style="font-weight: bold; color: #FF6B35; font-size: 14px; margin-bottom: 12px; border-bottom: 2px solid #FF6B35; padding-bottom: 6px;">
-                            📍 ${report.incidentType || 'Incident Report'}
+                            <i class="fas fa-map-marker-alt" style="margin-right: 6px;"></i> ${report.incidentType || 'Incident Report'}
                         </div>
                         
                         <div style="margin-bottom: 8px;">
                             <div style="font-size: 12px; color: #333; margin-bottom: 3px;">
-                                <strong>🏘️ Barangay:</strong> <span style="color: #666;">${report.barangay || 'Not specified'}</span>
+                                <strong><i class="fas fa-home" style="margin-right: 4px;"></i> Barangay:</strong> <span style="color: #666;">${report.barangay || 'Not specified'}</span>
                             </div>
                         </div>
                         
                         <div style="margin-bottom: 8px;">
                             <div style="font-size: 12px; color: #333; margin-bottom: 3px;">
-                                <strong>📅 Date & Time:</strong> <span style="color: #666;">${report.dateTime ? (() => {
+                                <strong><i class="fas fa-calendar-alt" style="margin-right: 4px;"></i> Date & Time:</strong> <span style="color: #666;">${report.dateTime ? (() => {
                                     const date = new Date(report.dateTime);
                                     const options = { 
                                         year: 'numeric' as const, 
@@ -154,13 +157,13 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                         
                         <div style="margin-bottom: 8px;">
                             <div style="font-size: 12px; color: #333; margin-bottom: 3px;">
-                                <strong>🚨 Incident Type:</strong> <span style="color: #666;">${report.incidentType || 'Not specified'}</span>
+                                <strong><i class="fas fa-exclamation-triangle" style="margin-right: 4px;"></i> Incident Type:</strong> <span style="color: #666;">${report.incidentType || 'Not specified'}</span>
                             </div>
                         </div>
                         
                         <div style="margin-bottom: 10px;">
                             <div style="font-size: 12px; color: #333; margin-bottom: 3px;">
-                                <strong>📊 Status:</strong> 
+                                <strong><i class="fas fa-chart-bar" style="margin-right: 4px;"></i> Status:</strong> 
                                 <span style="
                                     color: white; 
                                     background-color: ${report.status === 'Verified' ? '#22C55E' : report.status === 'Pending' ? '#F59E0B' : '#EF4444'}; 
@@ -173,7 +176,7 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                         </div>
                         
                         <div style="border-top: 1px solid #E5E7EB; padding-top: 8px;">
-                            <div style="font-size: 11px; color: #333; margin-bottom: 3px;"><strong>📝 Description:</strong></div>
+                            <div style="font-size: 11px; color: #333; margin-bottom: 3px;"><strong><i class="fas fa-edit" style="margin-right: 4px;"></i> Description:</strong></div>
                             <div style="font-size: 11px; color: #666; line-height: 1.4; max-height: 60px; overflow-y: auto;">
                                 ${report.description || 'No description available'}
                             </div>
@@ -181,7 +184,7 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                         
                         ${report.mediaURL && report.mediaURL.length > 0 ? `
                         <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #E5E7EB;">
-                            <div style="font-size: 11px; color: #333; margin-bottom: 6px;"><strong>📸 Media:</strong></div>
+                            <div style="font-size: 11px; color: #333; margin-bottom: 6px;"><strong><i class="fas fa-camera" style="margin-right: 4px;"></i> Media:</strong></div>
                             <div style="display: flex; gap: 6px; flex-wrap: wrap; max-height: 80px; overflow-y: auto;">
                                 ${report.mediaURL.split(';').slice(0, 3).map((url, index) => {
                                     const isVideo = url.includes('video') || url.includes('.mp4') || url.includes('.mov');
@@ -192,12 +195,12 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                                          onmouseout="this.style.transform='scale(1)'">
                                         ${isVideo 
                                             ? `<div style="width: 100%; height: 100%; background: #F3F4F6; display: flex; align-items: center; justify-content: center; color: #666;">
-                                                <span style="font-size: 16px;">🎥</span>
+                                                <i class="fas fa-video" style="font-size: 16px;"></i>
                                                </div>`
                                             : `<img src="${url}" style="width: 100%; height: 100%; object-fit: cover;" 
                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
                                                <div style="display: none; width: 100%; height: 100%; background: #F3F4F6; align-items: center; justify-content: center; color: #666;">
-                                                <span style="font-size: 16px;">📷</span>
+                                                <i class="fas fa-image" style="font-size: 16px;"></i>
                                                </div>`
                                         }
                                     </div>`;
@@ -232,16 +235,16 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                 .bindPopup(\`
                     <div style="max-width: 250px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 4px;">
                         <div style="font-weight: bold; color: ${hotspot.riskLevel === 'high' ? '#DC2626' : hotspot.riskLevel === 'medium' ? '#F59E0B' : '#10B981'}; font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-                            🔥 ${hotspot.riskLevel.toUpperCase()} RISK HOTSPOT
+                            <i class="fas fa-fire" style="margin-right: 4px;"></i> ${hotspot.riskLevel.toUpperCase()} RISK HOTSPOT
                         </div>
                         <div style="font-size: 12px; color: #333; margin-bottom: 4px;">
-                            <strong>📍 Location:</strong> ${hotspot.barangay || 'Multiple Areas'}
+                            <strong><i class="fas fa-map-marker-alt" style="margin-right: 4px;"></i> Location:</strong> ${hotspot.barangay || 'Multiple Areas'}
                         </div>
                         <div style="font-size: 12px; color: #333; margin-bottom: 4px;">
-                            <strong>📊 Incident Count:</strong> ${hotspot.incidentCount} verified reports
+                            <strong><i class="fas fa-chart-bar" style="margin-right: 4px;"></i> Incident Count:</strong> ${hotspot.incidentCount} verified reports
                         </div>
                         <div style="font-size: 12px; color: #333; margin-bottom: 6px;">
-                            <strong>⚠️ Risk Level:</strong> 
+                            <strong><i class="fas fa-exclamation-triangle" style="margin-right: 4px;"></i> Risk Level:</strong> 
                             <span style="
                                 background: ${hotspot.riskLevel === 'high' ? '#DC2626' : hotspot.riskLevel === 'medium' ? '#F59E0B' : '#10B981'}; 
                                 color: white; 
@@ -324,6 +327,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   const [reportType, setReportType] = useState('');
   const [reportDescription, setReportDescription] = useState('');
   const [isUserLoggedIn, setIsUserLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [isLoadingUserProfile, setIsLoadingUserProfile] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
@@ -399,6 +405,138 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     }
   };
 
+  // Function to check authentication status and load user profile
+  const checkAuthenticationStatus = async () => {
+    console.log('🔍 Checking authentication status...');
+    try {
+      const user = AuthService.getCurrentUser();
+      console.log('👤 Current user:', user ? `${user.uid} (${user.email})` : 'null');
+      setCurrentUser(user);
+      setIsUserLoggedIn(!!user);
+
+      if (user) {
+        setIsLoadingUserProfile(true);
+        console.log('👤 Loading user profile for:', user.uid);
+        
+        try {
+          const profileResult = await UserService.getCurrentUserProfile();
+          console.log('👤 Profile result:', profileResult);
+          if (profileResult.success && profileResult.data) {
+            setUserProfile(profileResult.data);
+            console.log('👤 User profile loaded successfully:', {
+              firstName: profileResult.data.firstName,
+              lastName: profileResult.data.lastName,
+              email: profileResult.data.email,
+              barangay: profileResult.data.barangay
+            });
+          } else {
+            console.warn('⚠️ Failed to load user profile:', profileResult.error);
+            setUserProfile(null);
+          }
+        } catch (profileError) {
+          console.error('❌ Error loading user profile:', profileError);
+          setUserProfile(null);
+        } finally {
+          setIsLoadingUserProfile(false);
+        }
+      } else {
+        console.log('👤 No user logged in - guest mode');
+        setUserProfile(null);
+      }
+    } catch (error) {
+      console.error('❌ Error checking authentication status:', error);
+      setIsUserLoggedIn(false);
+      setCurrentUser(null);
+      setUserProfile(null);
+    }
+  };
+
+  // Handle hardware back button with modal priority and logical navigation
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Priority 1: Close modals in logical order
+      if (isReportModalVisible) {
+        setIsReportModalVisible(false);
+        return true;
+      }
+      if (isMediaPickerVisible) {
+        setIsMediaPickerVisible(false);
+        return true;
+      }
+      if (isLocationPermissionModalVisible) {
+        setIsLocationPermissionModalVisible(false);
+        return true;
+      }
+      if (isNotificationModalVisible) {
+        setIsNotificationModalVisible(false);
+        return true;
+      }
+      if (isSidebarVisible) {
+        setIsSidebarVisible(false);
+        return true;
+      }
+      
+      // Priority 2: Use logical navigation (Map is home, so exit app)
+      const context = NavigationHelper.createContext('Map');
+      const handled = NavigationHelper.handleBackNavigation(navigation, 'Map', context);
+      
+      if (!handled) {
+        // NavigationHelper says to exit app
+        BackHandler.exitApp();
+      }
+      return true;
+    });
+
+    return () => backHandler.remove();
+  }, [isReportModalVisible, isMediaPickerVisible, isLocationPermissionModalVisible, isNotificationModalVisible, isSidebarVisible, navigation]);
+
+  // Auth state listener
+  useEffect(() => {
+    if (!fontsLoaded) return;
+    
+    const { auth } = require('../config/firebase');
+    const { onAuthStateChanged } = require('firebase/auth');
+    
+    const unsubscribe = onAuthStateChanged(auth, async (user: any) => {
+      console.log('🔄 Auth state changed:', user ? `${user.uid} (${user.email})` : 'null');
+      setCurrentUser(user);
+      setIsUserLoggedIn(!!user);
+
+      if (user) {
+        setIsLoadingUserProfile(true);
+        console.log('👤 Loading user profile for:', user.uid);
+        
+        try {
+          const profileResult = await UserService.getCurrentUserProfile();
+          console.log('👤 Profile result:', profileResult);
+          if (profileResult.success && profileResult.data) {
+            setUserProfile(profileResult.data);
+            console.log('👤 User profile loaded successfully:', {
+              firstName: profileResult.data.firstName,
+              lastName: profileResult.data.lastName,
+              email: profileResult.data.email,
+              barangay: profileResult.data.barangay
+            });
+          } else {
+            console.warn('⚠️ Failed to load user profile:', profileResult.error);
+            setUserProfile(null);
+          }
+        } catch (profileError) {
+          console.error('❌ Error loading user profile:', profileError);
+          setUserProfile(null);
+        } finally {
+          setIsLoadingUserProfile(false);
+        }
+      } else {
+        console.log('👤 No user logged in - guest mode');
+        setUserProfile(null);
+        setIsLoadingUserProfile(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [fontsLoaded]);
+
   // Request location permission and get current location on component mount
   useEffect(() => {
     if (!fontsLoaded) return;
@@ -444,6 +582,52 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   };
 
   const handleSubmitReport = async () => {
+    // Check if user is authenticated
+    const currentUser = AuthService.getCurrentUser();
+    if (!currentUser) {
+      Alert.alert('Authentication Required', 'You must be logged in to submit a report');
+      return;
+    }
+
+    // Check user's barangay eligibility
+    try {
+      const userProfileResult = await UserService.getCurrentUserProfile();
+      if (!userProfileResult.success || !userProfileResult.data) {
+        Alert.alert('Profile Error', 'Unable to load your profile. Please try again.');
+        return;
+      }
+
+      const userProfile = userProfileResult.data;
+      if (!isReportingAllowed(userProfile.barangay)) {
+        Alert.alert(
+          'Reporting Not Available', 
+          `Sorry, reporting is currently only available for residents of Pinagbakahan, Look, Bulihan, Dakila, and Mojon barangays. Your registered barangay: ${userProfile.barangay}`
+        );
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking user eligibility:', error);
+      Alert.alert('Error', 'Unable to verify your eligibility. Please try again.');
+      return;
+    }
+
+    // Check location permission
+    try {
+      const locationService = LocationService.getInstance();
+      const hasPermission = await locationService.requestLocationPermission();
+      if (!hasPermission) {
+        Alert.alert(
+          'Location Required', 
+          'Location access is required to submit reports. Please enable location permissions and try again.'
+        );
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking location permission:', error);
+      Alert.alert('Error', 'Unable to check location permissions. Please try again.');
+      return;
+    }
+
     if (!reportType.trim()) {
       Alert.alert('Error', 'Please enter the type of incident');
       return;
@@ -451,12 +635,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
 
     if (!reportDescription.trim()) {
       Alert.alert('Error', 'Please provide a description of the incident');
-      return;
-    }
-
-    const currentUser = AuthService.getCurrentUser();
-    if (!currentUser) {
-      Alert.alert('Error', 'You must be logged in to submit a report');
       return;
     }
 
@@ -780,22 +958,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           <FontAwesome name="bars" size={22} color="white" />
         </TouchableOpacity>
         
-        <Text style={styles.headerTitle}>ReportIT Map</Text>
         
-        <View style={styles.headerStatus}>
-          <View style={styles.reportsStatus}>
-            <Text style={styles.reportsStatusText}>
-              {(isLoadingReports || isLoadingHotspots) ? 'Loading...' : `${reports.length} Reports`}
-            </Text>
-          </View>
-          {hotspots.length > 0 && (
-            <View style={[styles.reportsStatus, { backgroundColor: 'rgba(255, 107, 53, 0.3)', marginTop: 4 }]}>
-              <Text style={styles.reportsStatusText}>
-                🔥 {hotspots.length} Hotspots
-              </Text>
-            </View>
-          )}
-        </View>
+
       </View>
 
       <View style={styles.searchContainer}>
@@ -858,29 +1022,164 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
               { transform: [{ translateX: slideAnim }] }
             ]}
           >
-            <TouchableOpacity style={styles.profileContainer}>
-              <View style={styles.profileImageContainer}>
-                <Image
-                  source={{ uri: 'https://via.placeholder.com/60' }}
-                  style={styles.profileImage}
-                />
-              </View>
-              <Text style={styles.profileName}></Text>
-              <TouchableOpacity style={styles.editProfileButton}>
-                <Text style={styles.editProfileText}>Edit profile</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
+            {/* Profile Section - Different content based on authentication */}
+            <View style={styles.profileContainer}>
+              {isUserLoggedIn && userProfile ? (
+                <>
+                  <View style={styles.profileImageContainer}>
+                    {userProfile.profilePictureURL ? (
+                      <Image 
+                        source={{ uri: userProfile.profilePictureURL }} 
+                        style={styles.profileImage}
+                      />
+                    ) : (
+                      <View style={styles.profileImagePlaceholder}>
+                        <Text style={styles.profileInitials}>
+                          {userProfile.firstName?.charAt(0)?.toUpperCase()}{userProfile.lastName?.charAt(0)?.toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.profileName}>
+                    {userProfile.firstName} {userProfile.lastName}
+                  </Text>
+                  <Text style={styles.profileEmail}>
+                    {userProfile.email}
+                  </Text>
+                  <Text style={styles.profileLocation}>
+                    {userProfile.barangay}, {userProfile.city}
+                  </Text>
+                  <TouchableOpacity 
+                    style={styles.editProfileButton}
+                    onPress={handleEditProfilePress}
+                  >
+                    <Text style={styles.editProfileText}>Edit profile</Text>
+                  </TouchableOpacity>
+                </>
+              ) : isUserLoggedIn && isLoadingUserProfile ? (
+                <>
+                  <View style={styles.profileImageContainer}>
+                    <View style={styles.profileImagePlaceholder}>
+                      <Text style={styles.profileInitials}>...</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.profileName}>Loading...</Text>
+                  <Text style={styles.profileEmail}>Please wait</Text>
+                </>
+              ) : (
+                <>
+                  <View style={styles.profileImageContainer}>
+                    <View style={styles.guestProfilePlaceholder}>
+                      <Text style={styles.guestProfileIcon}>👤</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.guestProfileName}>Guest User</Text>
+                  <Text style={styles.guestProfileSubtext}>Using without account</Text>
+                  <TouchableOpacity 
+                    style={styles.loginButton}
+                    onPress={() => {
+                      Animated.timing(slideAnim, {
+                        toValue: -280,
+                        duration: 300,
+                        useNativeDriver: true,
+                      }).start(() => {
+                        setIsSidebarVisible(false);
+                        navigation.navigate('Login');
+                      });
+                    }}
+                  >
+                    <Text style={styles.loginButtonText}>Login to Account</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
 
             <View style={styles.menuSection}>
-              <TouchableOpacity style={styles.menuItem}>
+              {/* Report Incident - Always visible but behavior differs */}
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => {
+                  setIsSidebarVisible(false);
+                  handleReportPress();
+                }}
+              >
                 <Text style={styles.menuItemText}>Report an Incident</Text>
               </TouchableOpacity>
+
+              {/* Notifications - Always visible */}
               <TouchableOpacity style={styles.menuItem} onPress={handleNotificationPress}>
                 <Text style={styles.menuItemText}>Enable Notifications</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.menuItem} onPress={handleEditProfilePress}>
-                <Text style={styles.menuItemText}>Edit Profile</Text>
-              </TouchableOpacity>
+
+              {/* Conditional menu items based on authentication */}
+              {isUserLoggedIn ? (
+                <>
+                  {/* Edit Profile - Only for logged in users */}
+                  <TouchableOpacity style={styles.menuItem} onPress={handleEditProfilePress}>
+                    <Text style={styles.menuItemText}>Edit Profile</Text>
+                  </TouchableOpacity>
+
+                  {/* Analysis - Only for logged in users */}
+                  <TouchableOpacity 
+                    style={styles.menuItem}
+                    onPress={() => {
+                      Animated.timing(slideAnim, {
+                        toValue: -280,
+                        duration: 300,
+                        useNativeDriver: true,
+                      }).start(() => {
+                        setIsSidebarVisible(false);
+                        navigation.navigate('IncidentAnalysis');
+                      });
+                    }}
+                  >
+                    <Text style={styles.menuItemText}>Incident Analysis</Text>
+                  </TouchableOpacity>
+
+                  {/* Log Out - Only for logged in users */}
+                  <TouchableOpacity 
+                    style={styles.menuItem}
+                    onPress={() => {
+                      Animated.timing(slideAnim, {
+                        toValue: -280,
+                        duration: 300,
+                        useNativeDriver: true,
+                      }).start(() => {
+                        setIsSidebarVisible(false);
+                        // Sign out user
+                        AuthService.signOut();
+                        setIsUserLoggedIn(false);
+                        setCurrentUser(null);
+                        setUserProfile(null);
+                        navigation.navigate('Login');
+                      });
+                    }}
+                  >
+                    <Text style={styles.menuItemText}>Log Out</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  {/* Sign Up - Only for guest users */}
+                  <TouchableOpacity 
+                    style={styles.menuItem}
+                    onPress={() => {
+                      Animated.timing(slideAnim, {
+                        toValue: -280,
+                        duration: 300,
+                        useNativeDriver: true,
+                      }).start(() => {
+                        setIsSidebarVisible(false);
+                        navigation.navigate('Signup');
+                      });
+                    }}
+                  >
+                    <Text style={styles.menuItemText}>Create Account</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {/* Terms and Conditions - Always visible */}
               <TouchableOpacity 
                 style={styles.menuItem}
                 onPress={() => {
@@ -894,22 +1193,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
                   });
                 }}
               >
-                <Text style={styles.menuItemText}>Terms and Condition</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.menuItem}
-                onPress={() => {
-                  Animated.timing(slideAnim, {
-                    toValue: -280,
-                    duration: 300,
-                    useNativeDriver: true,
-                  }).start(() => {
-                    setIsSidebarVisible(false);
-                    navigation.navigate('Login');
-                  });
-                }}
-              >
-                <Text style={styles.menuItemText}>Log Out</Text>
+                <Text style={styles.menuItemText}>Terms and Conditions</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
@@ -994,7 +1278,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       </Modal>
 
       <Modal
-        animationType="slide"
+        animationType="fade"
         transparent={true}
         visible={isReportModalVisible}
         onRequestClose={handleCloseReportModal}
@@ -1015,8 +1299,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
                 <FontAwesome name="map-marker" size={16} color="#EF4444" />
                 <Text style={styles.locationText}>
                   {userLocation 
-                    ? `📍 Location: ${userLocation.latitude.toFixed(6)}, ${userLocation.longitude.toFixed(6)}`
-                    : '📍 Getting your location...'
+                    ? `Location: ${userLocation.latitude.toFixed(6)}, ${userLocation.longitude.toFixed(6)}`
+                    : 'Getting your location...'
                   }
                 </Text>
               </View>
@@ -1197,7 +1481,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'white',
     borderRadius: 24,
-    paddingHorizontal: 20,
+    paddingHorizontal: 25,
     paddingVertical: 8,
     shadowColor: '#000',
     shadowOffset: {
@@ -1310,15 +1594,79 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   profileImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  profileImagePlaceholder: {
     width: 60,
     height: 60,
     borderRadius: 30,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileInitials: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   profileName: {
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 8,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  profileEmail: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  profileLocation: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  guestProfilePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guestProfileIcon: {
+    fontSize: 24,
+  },
+  guestProfileName: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  guestProfileSubtext: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  loginButton: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    alignSelf: 'center',
+  },
+  loginButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   editProfileButton: {
     paddingHorizontal: 16,
@@ -1326,6 +1674,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'white',
     borderRadius: 16,
+    alignSelf: 'center',
   },
   editProfileText: {
     color: 'white',
@@ -1415,13 +1764,16 @@ const styles = StyleSheet.create({
   reportModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   reportModal: {
     backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
     height: '85%',
+    width: '100%',
+    maxWidth: 400,
     paddingTop: 24,
     paddingHorizontal: 24,
     display: 'flex',

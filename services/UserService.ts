@@ -1,5 +1,6 @@
 import { ref, set, get, update, remove } from 'firebase/database';
-import { database } from '../config/firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { database, storage } from '../config/firebase';
 import { User } from 'firebase/auth';
 
 export interface UserProfile {
@@ -8,6 +9,10 @@ export interface UserProfile {
   lastName: string;
   username: string;
   email: string;
+  barangay: string;
+  city: string;
+  profilePictureURL?: string;
+  profilePicturePath?: string;
   createdAt: string;
   updatedAt?: string;
   isActive?: boolean;
@@ -19,6 +24,8 @@ export interface CreateUserProfileData {
   lastName: string;
   username: string;
   email: string;
+  barangay: string;
+  city: string;
 }
 
 export interface UserServiceResult {
@@ -71,6 +78,8 @@ export class UserService {
         lastName: profileData.lastName,
         username: profileData.username,
         email: profileData.email,
+        barangay: profileData.barangay,
+        city: profileData.city,
         createdAt: new Date().toISOString(),
         isActive: true, // New accounts are active by default
       };
@@ -422,6 +431,166 @@ export class UserService {
       return {
         success: false,
         error: error.message || 'Failed to update profile'
+      };
+    }
+  }
+
+  /**
+   * Upload profile picture for the current user
+   */
+  static async uploadProfilePicture(imageUri: string): Promise<UserServiceResult> {
+    try {
+      const { auth, storage } = await import('../config/firebase');
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        return {
+          success: false,
+          error: 'No user is currently signed in'
+        };
+      }
+
+      console.log('Uploading profile picture for user:', currentUser.uid);
+
+      // Generate unique filename
+      const timestamp = Date.now();
+      const filename = `profile_${currentUser.uid}_${timestamp}.jpg`;
+      const profilePicturePath = `profile_pictures/${currentUser.uid}/${filename}`;
+      
+      // Convert image URI to blob
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+      
+      // Upload to Firebase Storage
+      const { ref: storageRef, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const imageRef = storageRef(storage, profilePicturePath);
+      const uploadResult = await uploadBytes(imageRef, blob);
+      
+      // Get download URL
+      const downloadURL = await getDownloadURL(imageRef);
+      
+      // Update user profile with new image URLs
+      const profileUpdate = {
+        profilePictureURL: downloadURL,
+        profilePicturePath: profilePicturePath,
+        updatedAt: new Date().toISOString()
+      };
+      
+      const updateResult = await this.updateCurrentUserProfile(profileUpdate);
+      
+      if (updateResult.success) {
+        console.log('Profile picture uploaded successfully');
+        return {
+          success: true,
+          data: {
+            profilePictureURL: downloadURL,
+            profilePicturePath: profilePicturePath
+          }
+        };
+      } else {
+        return updateResult;
+      }
+    } catch (error: any) {
+      console.error('Error uploading profile picture:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to upload profile picture'
+      };
+    }
+  }
+
+  /**
+   * Delete current user's profile picture
+   */
+  static async deleteProfilePicture(): Promise<UserServiceResult> {
+    try {
+      const { auth, storage } = await import('../config/firebase');
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        return {
+          success: false,
+          error: 'No user is currently signed in'
+        };
+      }
+
+      console.log('Deleting profile picture for user:', currentUser.uid);
+      
+      // Get current user profile to find the image path
+      const profileResult = await this.getCurrentUserProfile();
+      if (!profileResult.success || !profileResult.data) {
+        return {
+          success: false,
+          error: 'Could not retrieve current user profile'
+        };
+      }
+
+      const userProfile = profileResult.data as UserProfile;
+      
+      // If user has a profile picture, delete it from storage
+      if (userProfile.profilePicturePath) {
+        try {
+          const { ref: storageRef, deleteObject } = await import('firebase/storage');
+          const imageRef = storageRef(storage, userProfile.profilePicturePath);
+          await deleteObject(imageRef);
+          console.log('Profile picture deleted from storage');
+        } catch (storageError: any) {
+          console.warn('Could not delete image from storage:', storageError.message);
+          // Continue with profile update even if storage deletion fails
+        }
+      }
+      
+      // Remove profile picture URLs from user profile
+      const profileUpdate = {
+        profilePictureURL: undefined,
+        profilePicturePath: undefined,
+        updatedAt: new Date().toISOString()
+      };
+      
+      const updateResult = await this.updateCurrentUserProfile(profileUpdate);
+      
+      if (updateResult.success) {
+        console.log('Profile picture removed successfully');
+        return {
+          success: true,
+          data: { profilePictureRemoved: true }
+        };
+      } else {
+        return updateResult;
+      }
+    } catch (error: any) {
+      console.error('Error deleting profile picture:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to delete profile picture'
+      };
+    }
+  }
+
+  /**
+   * Update profile picture with a new image
+   */
+  static async updateProfilePicture(imageUri: string): Promise<UserServiceResult> {
+    try {
+      console.log('Updating profile picture...');
+      
+      // First delete the old profile picture if it exists
+      await this.deleteProfilePicture();
+      
+      // Then upload the new profile picture
+      const uploadResult = await this.uploadProfilePicture(imageUri);
+      
+      if (uploadResult.success) {
+        console.log('Profile picture updated successfully');
+        return uploadResult;
+      } else {
+        return uploadResult;
+      }
+    } catch (error: any) {
+      console.error('Error updating profile picture:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to update profile picture'
       };
     }
   }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  BackHandler,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import {
@@ -19,24 +20,13 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { AuthService } from '../services/AuthService';
+import { NavigationHelper } from '../utils/NavigationHelper';
 
 
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
       d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
-      stroke={color}
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-);
-
-const BackIcon = ({ size = 24, color = "white" }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M19 12H5M12 19l-7-7 7-7"
       stroke={color}
       strokeWidth="2"
       strokeLinecap="round"
@@ -114,6 +104,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '', general: '' });
 
+  // Handle hardware back button using logical navigation
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      const context = NavigationHelper.createContext('Login');
+      const handled = NavigationHelper.handleBackNavigation(navigation, 'Login', context);
+      
+      if (!handled) {
+        // NavigationHelper says to exit app
+        BackHandler.exitApp();
+      }
+      return true;
+    });
+
+    return () => backHandler.remove();
+  }, [navigation]);
+
   if (!fontsLoaded) {
     return null;
   }
@@ -176,16 +182,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <BackIcon size={20} color="white" />
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
-      </View>
-
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.logoSection}>
           <ShieldIcon size={48} color="#EF4444" />
@@ -278,6 +274,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               <Text style={styles.errorText}>{errors.general}</Text>
             </View>
           ) : null}
+
+          <View style={styles.guestContainer}>
+            <TouchableOpacity onPress={() => navigation.navigate('Map')} disabled={loading}>
+              <Text style={styles.guestText}>Use without account</Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.signupContainer}>
             <Text style={styles.signupText}>Don't have an account? </Text>
@@ -461,6 +463,16 @@ const styles = StyleSheet.create({
   },
   loginButtonDisabled: {
     backgroundColor: '#9CA3AF',
+  },
+  guestContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  guestText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontFamily: 'Poppins_500Medium',
+    textDecorationLine: 'underline',
   },
 });
 

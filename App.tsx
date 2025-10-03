@@ -4,8 +4,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, BackHandler, Platform } from 'react-native';
 import { LaunchUtils } from './utils/LaunchUtils';
+import { NavigationHelper } from './utils/NavigationHelper';
 
 import SplashScreen from './screens/SplashScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
@@ -74,7 +75,7 @@ export default function App() {
     );
   }
 
-  const initialRouteName = isFirstLaunch ? "Welcome" : "Map";
+  const initialRouteName = isFirstLaunch ? "Welcome" : "Login";
 
   const handleNavigationStateChange = (state: any) => {
     if (isFirstLaunch && state?.routes) {
@@ -83,29 +84,126 @@ export default function App() {
         markAsLaunched();
       }
     }
+
+    // Log navigation for debugging logical flow
+    if (state?.routes) {
+      const currentRoute = state.routes[state.index];
+      const previousRoute = state.routes[state.index - 1];
+      console.log('Navigation:', {
+        current: currentRoute?.name,
+        previous: previousRoute?.name,
+        stackLength: state.routes.length
+      });
+    }
   };
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer onStateChange={handleNavigationStateChange}>
+      <NavigationContainer 
+        onStateChange={handleNavigationStateChange}
+        onReady={() => {
+          console.log('Navigation container is ready');
+        }}
+        onUnhandledAction={(action) => {
+          console.warn('Unhandled navigation action:', action);
+        }}
+      >
         <Stack.Navigator 
           initialRouteName={initialRouteName}
           screenOptions={{
             headerShown: false,
             gestureEnabled: true,
+            gestureDirection: 'horizontal',
           }}
         >
-          <Stack.Screen name="Welcome" component={WelcomeScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Signup" component={SignupScreen} />
-          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-          <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
-          <Stack.Screen name="CreateNewPassword" component={CreateNewPasswordScreen} />
-          <Stack.Screen name="PasswordResetComplete" component={PasswordResetCompleteScreen} />
-          <Stack.Screen name="TermsAndConditions" component={TermsAndConditionsScreen} />
-          <Stack.Screen name="Map" component={MapScreen} />
-          <Stack.Screen name="IncidentAnalysis" component={IncidentAnalysisScreen} />
-          <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+          <Stack.Screen 
+            name="Welcome" 
+            component={WelcomeScreen}
+            options={{ 
+              gestureEnabled: false, // No back from welcome
+              animationTypeForReplace: 'push'
+            }}
+          />
+          <Stack.Screen 
+            name="Login" 
+            component={LoginScreen}
+            options={{ 
+              gestureEnabled: false, // Custom back handler (exit app)
+              animationTypeForReplace: 'push'
+            }}
+          />
+          <Stack.Screen 
+            name="Signup" 
+            component={SignupScreen}
+            options={{ 
+              gestureEnabled: true, // Can swipe back to login
+              gestureDirection: 'horizontal'
+            }}
+          />
+          <Stack.Screen 
+            name="ForgotPassword" 
+            component={ForgotPasswordScreen}
+            options={{ 
+              gestureEnabled: true, // Can swipe back to login
+              gestureDirection: 'horizontal'
+            }}
+          />
+          <Stack.Screen 
+            name="VerifyEmail" 
+            component={VerifyEmailScreen}
+            options={{ 
+              gestureEnabled: true, // Can swipe back to forgot password
+              gestureDirection: 'horizontal'
+            }}
+          />
+          <Stack.Screen 
+            name="CreateNewPassword" 
+            component={CreateNewPasswordScreen}
+            options={{ 
+              gestureEnabled: true, // Can swipe back to verify email
+              gestureDirection: 'horizontal'
+            }}
+          />
+          <Stack.Screen 
+            name="PasswordResetComplete" 
+            component={PasswordResetCompleteScreen}
+            options={{ 
+              gestureEnabled: false, // No back from completion screen
+              animationTypeForReplace: 'push'
+            }}
+          />
+          <Stack.Screen 
+            name="TermsAndConditions" 
+            component={TermsAndConditionsScreen}
+            options={{ 
+              gestureEnabled: true, // Can swipe back to signup
+              gestureDirection: 'horizontal'
+            }}
+          />
+          <Stack.Screen 
+            name="Map" 
+            component={MapScreen}
+            options={{ 
+              gestureEnabled: false, // Map is home base, custom back handler
+              animationTypeForReplace: 'push'
+            }}
+          />
+          <Stack.Screen 
+            name="IncidentAnalysis" 
+            component={IncidentAnalysisScreen}
+            options={{ 
+              gestureEnabled: true, // Can swipe back to map
+              gestureDirection: 'horizontal'
+            }}
+          />
+          <Stack.Screen 
+            name="EditProfile" 
+            component={EditProfileScreen}
+            options={{ 
+              gestureEnabled: true, // Can swipe back to map
+              gestureDirection: 'horizontal'
+            }}
+          />
         </Stack.Navigator>
         <StatusBar style="auto" />
       </NavigationContainer>
