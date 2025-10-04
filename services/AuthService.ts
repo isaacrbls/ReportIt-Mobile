@@ -30,6 +30,22 @@ export class AuthService {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       
+      // Check user role first
+      console.log('Checking user role for:', userCredential.user.uid);
+      const roleResult = await UserService.checkUserRole(userCredential.user.uid);
+      
+      if (roleResult.success && roleResult.data) {
+        if (!roleResult.data.canLogin) {
+          // Sign out immediately if user doesn't have 'user' role
+          await signOut(auth);
+          console.log('Login denied: User does not have the required role');
+          return {
+            success: false,
+            error: 'Access denied. Only user accounts can login to this application.'
+          };
+        }
+      }
+      
       // Check if account needs reactivation (if it was deactivated)
       console.log('Checking account status for user:', userCredential.user.uid);
       const statusResult = await UserService.isAccountActive(userCredential.user.uid);

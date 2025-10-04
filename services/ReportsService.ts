@@ -22,6 +22,8 @@ export interface Report {
     longitude: number;
   };
   incidentType: string;
+  category?: string;
+  isSensitive?: boolean;
   latitude: number;
   longitude: number;
   mediaType: string | null;
@@ -35,6 +37,8 @@ export interface CreateReportData {
   barangay: string;
   description: string;
   incidentType: string;
+  category?: string;
+  isSensitive?: boolean;
   latitude: number;
   longitude: number;
   submittedByEmail: string;

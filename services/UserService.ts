@@ -11,6 +11,7 @@ export interface UserProfile {
   email: string;
   barangay: string;
   city: string;
+  role: string; // 'user' or 'admin'
   profilePictureURL?: string;
   profilePicturePath?: string;
   createdAt: string;
@@ -80,6 +81,7 @@ export class UserService {
         email: profileData.email,
         barangay: profileData.barangay,
         city: profileData.city,
+        role: 'user', // All new accounts are created with 'user' role
         createdAt: new Date().toISOString(),
         isActive: true, // New accounts are active by default
       };
@@ -328,6 +330,43 @@ export class UserService {
       return {
         success: false,
         error: error.message || 'Failed to check account status'
+      };
+    }
+  }
+
+  /**
+   * Check if user has the required role to login
+   */
+  static async checkUserRole(uid: string): Promise<UserServiceResult> {
+    try {
+      const userRef = ref(database, `users/${uid}`);
+      const snapshot = await get(userRef);
+      
+      if (snapshot.exists()) {
+        const userData = snapshot.val();
+        const userRole = userData.role || 'user'; // Default to 'user' if not set
+        
+        // Only allow 'user' role to login (not admin or other roles)
+        const canLogin = userRole === 'user';
+        
+        return {
+          success: true,
+          data: {
+            role: userRole,
+            canLogin: canLogin
+          }
+        };
+      } else {
+        return {
+          success: false,
+          error: 'User profile not found'
+        };
+      }
+    } catch (error: any) {
+      console.error('Error checking user role:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to check user role'
       };
     }
   }

@@ -1,6 +1,11 @@
 export interface Barangay {
   name: string;
   code?: string;
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+    radiusKm?: number; // Approximate radius of the barangay in kilometers
+  };
 }
 
 export interface City {
@@ -521,6 +526,36 @@ export const ALLOWED_REPORTING_BARANGAYS = [
   "Mojon"
 ];
 
+// Barangay coordinates for the allowed reporting barangays (approximate center points)
+// These are the 5 barangays in Malolos City that allow reporting
+export const BARANGAY_COORDINATES: { [key: string]: { latitude: number; longitude: number; radiusKm: number } } = {
+  "Pinagbakahan": {
+    latitude: 14.8441,
+    longitude: 120.8118,
+    radiusKm: 2.0 // Approximate 2km radius
+  },
+  "Look": {
+    latitude: 14.8523,
+    longitude: 120.8234,
+    radiusKm: 1.5 // Approximate 1.5km radius
+  },
+  "Bulihan": {
+    latitude: 14.8635,
+    longitude: 120.8156,
+    radiusKm: 1.8 // Approximate 1.8km radius
+  },
+  "Dakila": {
+    latitude: 14.8498,
+    longitude: 120.8089,
+    radiusKm: 1.5 // Approximate 1.5km radius
+  },
+  "Mojon": {
+    latitude: 14.8357,
+    longitude: 120.8201,
+    radiusKm: 1.7 // Approximate 1.7km radius
+  }
+};
+
 // Helper function to get all barangays as a flat array
 export const getAllBarangays = (): { cityName: string; barangayName: string; fullName: string }[] => {
   const allBarangays: { cityName: string; barangayName: string; fullName: string }[] = [];
@@ -552,4 +587,66 @@ export const findCityByBarangay = (barangayName: string): string | null => {
     }
   }
   return null;
+};
+
+// Helper function to calculate distance between two coordinates (Haversine formula)
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = R * c; // Distance in kilometers
+  return distance;
+};
+
+// Helper function to check if user's current location is within their barangay's vicinity
+export const isWithinBarangayVicinity = (
+  userBarangay: string,
+  currentLatitude: number,
+  currentLongitude: number
+): { isWithin: boolean; distance: number; allowedRadius: number } => {
+  // Check if the barangay has coordinates defined
+  const barangayCoords = BARANGAY_COORDINATES[userBarangay];
+  
+  if (!barangayCoords) {
+    // If barangay doesn't have coordinates, we can't verify location
+    // Return true to allow reporting (fail-open for barangays without coordinates)
+    console.warn(`No coordinates defined for barangay: ${userBarangay}`);
+    return {
+      isWithin: true,
+      distance: 0,
+      allowedRadius: 0
+    };
+  }
+  
+  // Calculate distance between user's location and barangay center
+  const distance = calculateDistance(
+    currentLatitude,
+    currentLongitude,
+    barangayCoords.latitude,
+    barangayCoords.longitude
+  );
+  
+  // Check if user is within the barangay's radius
+  const isWithin = distance <= barangayCoords.radiusKm;
+  
+  console.log(`📍 Location check for ${userBarangay}:`, {
+    userLocation: { lat: currentLatitude, lng: currentLongitude },
+    barangayCenter: { lat: barangayCoords.latitude, lng: barangayCoords.longitude },
+    distance: `${distance.toFixed(2)} km`,
+    allowedRadius: `${barangayCoords.radiusKm} km`,
+    isWithin: isWithin
+  });
+  
+  return {
+    isWithin: isWithin,
+    distance: distance,
+    allowedRadius: barangayCoords.radiusKm
+  };
 };

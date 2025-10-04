@@ -33,13 +33,53 @@ import {
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
+// Category icon symbols (emoji work reliably in WebView)
+const CATEGORY_ICON_SYMBOLS: { [key: string]: string } = {
+  'Theft': '🔒',
+  'Reports/Agreement': '📋',
+  'Accident': '🚗',
+  'Debt / Unpaid Wages Report': '💰',
+  'Defamation Complaint': '🗣️',
+  'Assault/Harassment': '⚠️',
+  'Property Damage/Incident': '🏚️',
+  'Animal Incident': '🐕',
+  'Verbal Abuse and Threats': '🗯️',
+  'Alarm and Scandal': '🚨',
+  'Lost Items': '🔍',
+  'Scam/Fraud': '🎭',
+  'Drugs Addiction': '💊',
+  'Missing Person': '👤',
+  'Others': '❗',
+};
+
+// Get icon symbol for category
+const getCategoryIconSymbol = (category: string | undefined): string => {
+  if (!category || !CATEGORY_ICON_SYMBOLS[category]) {
+    return CATEGORY_ICON_SYMBOLS['Others'];
+  }
+  return CATEGORY_ICON_SYMBOLS[category];
+};
+
 const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCoords | null; reports: Report[]; hotspots: Hotspot[] }) => {
+  console.log('🗺️ MapView rendering with:', {
+    userLocation: userLocation ? `${userLocation.latitude}, ${userLocation.longitude}` : 'null',
+    reportsCount: reports.length,
+    hotspotsCount: hotspots.length
+  });
+
   const mapWidth = screenWidth;
   const mapHeight = screenHeight - 200;
 
   const mapCenter = userLocation 
     ? [userLocation.latitude, userLocation.longitude]
     : [14.7942, 120.8781];
+  
+  console.log('🗺️ Map center:', mapCenter, 'Size:', mapWidth, 'x', mapHeight);
+
+  // Function to get icon symbol based on category
+  const getCategoryIconSymbol = (category: string | undefined): string => {
+    return category && CATEGORY_ICON_SYMBOLS[category] ? CATEGORY_ICON_SYMBOLS[category] : '❗';
+  };
 
   const leafletHTML = `
     <!DOCTYPE html>
@@ -86,16 +126,54 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
         
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script>
-            // Initialize map with dynamic center location
-            var map = L.map('map', {
-                zoomControl: false,
-                attributionControl: false
-            }).setView([${mapCenter[0]}, ${mapCenter[1]}], 15);
+            // Debug logging function
+            function debugLog(message) {
+                console.log('[MAP DEBUG]', message);
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'debug', message: message }));
+                }
+            }
+            
+            debugLog('Script started');
+            
+            // Define Philippines geographical bounds
+            // Southwest corner: Mindanao (approx 4.5°N, 116.9°E)
+            // Northeast corner: Northern Luzon (approx 21.2°N, 126.6°E)
+            var philippinesBounds = L.latLngBounds(
+                L.latLng(4.5, 116.9),  // Southwest
+                L.latLng(21.2, 126.6)  // Northeast
+            );
+            
+            debugLog('Philippines bounds defined');
+
+            // Initialize map with dynamic center location and bounds
+            debugLog('Initializing map...');
+            try {
+                var map = L.map('map', {
+                    zoomControl: false,
+                    attributionControl: false,
+                    maxBounds: philippinesBounds,
+                    maxBoundsViscosity: 1.0,  // Prevent dragging outside bounds
+                    minZoom: 6,   // Minimum zoom to see entire Philippines
+                    maxZoom: 18   // Maximum zoom for street-level detail
+                }).setView([${mapCenter[0]}, ${mapCenter[1]}], 15);
+                debugLog('Map initialized successfully');
+            } catch(e) {
+                debugLog('Error initializing map: ' + e.message);
+                throw e;
+            }
 
             // Add OpenStreetMap tiles
-            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: ''
-            }).addTo(map);
+            debugLog('Adding tile layer...');
+            try {
+                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '',
+                    maxZoom: 19
+                }).addTo(map);
+                debugLog('Tile layer added successfully');
+            } catch(e) {
+                debugLog('Error adding tile layer: ' + e.message);
+            }
 
             // Font Awesome pin icon for user location
             var userIcon = L.divIcon({
@@ -105,25 +183,69 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                 className: 'custom-user-pin'
             });
 
-            // Custom ReportIT pin with exclamation point
-            var reportIcon = L.divIcon({
-                html: '<div style="position: relative; width: 32px; height: 40px;"><div style="width: 32px; height: 32px; background: linear-gradient(135deg, #FF6B35, #EF4444); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid white; box-shadow: 0 3px 8px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center;"><div style="transform: rotate(45deg); color: white; font-weight: bold; font-size: 16px; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">!</div></div></div>',
-                iconSize: [32, 40],
-                iconAnchor: [16, 35],
-                className: 'custom-reportit-pin'
-            });
+            // Category icon symbols
+            var categoryIcons = ${JSON.stringify(CATEGORY_ICON_SYMBOLS)};
+
+            // Function to get icon symbol based on category
+            function getCategoryIcon(category) {
+                if (!category || !categoryIcons[category]) {
+                    return categoryIcons['Others'] || '❗';
+                }
+                return categoryIcons[category];
+            }
+
+            // Function to format date safely
+            function formatDate(dateString) {
+                if (!dateString) return 'Not specified';
+                try {
+                    var date = new Date(dateString);
+                    if (isNaN(date.getTime())) return 'Invalid date';
+                    
+                    var options = {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                    };
+                    return date.toLocaleDateString('en-US', options);
+                } catch (e) {
+                    return 'Invalid date';
+                }
+            }
+
+            // Function to create category-specific icon with emoji
+            function createCategoryIcon(category) {
+                var icon = getCategoryIcon(category);
+                return L.divIcon({
+                    html: '<div style="position: relative; width: 32px; height: 40px;"><div style="width: 32px; height: 32px; background: linear-gradient(135deg, #FF6B35, #EF4444); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid white; box-shadow: 0 3px 8px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center;"><span style="font-size: 18px; transform: rotate(45deg); display: inline-block;">' + icon + '</span></div></div>',
+                    iconSize: [32, 40],
+                    iconAnchor: [16, 35],
+                    className: 'custom-reportit-pin'
+                });
+            }
 
             // User location marker (only show if location is available)
             ${userLocation ? `
-            L.marker([${userLocation.latitude}, ${userLocation.longitude}], {icon: userIcon})
-                .addTo(map)
-                .bindPopup('<div style="font-weight: bold; color: #EF4444;">Your Current Location</div>');
-            ` : ''}
+            debugLog('Adding user location marker at [${userLocation.latitude}, ${userLocation.longitude}]');
+            try {
+                L.marker([${userLocation.latitude}, ${userLocation.longitude}], {icon: userIcon})
+                    .addTo(map)
+                    .bindPopup('<div style="font-weight: bold; color: #EF4444;">Your Current Location</div>');
+                debugLog('User location marker added');
+            } catch(e) {
+                debugLog('Error adding user marker: ' + e.message);
+            }
+            ` : 'debugLog("No user location available");'}
 
-            // Add report markers
-            ${reports.map(report => `
-            L.marker([${report.geoLocation.latitude}, ${report.geoLocation.longitude}], {icon: reportIcon})
-                .addTo(map)
+            // Add report markers with category-specific icons
+            debugLog('Adding ${reports.length} report markers...');
+            ${reports.map((report, index) => `
+            try {
+                debugLog('Adding marker ${index + 1}/${reports.length} at [${report.geoLocation.latitude}, ${report.geoLocation.longitude}]');
+                L.marker([${report.geoLocation.latitude}, ${report.geoLocation.longitude}], {icon: createCategoryIcon('${report.category || ''}')})
+                    .addTo(map)
                 .bindPopup(\`
                     <div style="max-width: 280px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 4px;">
                         <div style="font-weight: bold; color: #FF6B35; font-size: 14px; margin-bottom: 12px; border-bottom: 2px solid #FF6B35; padding-bottom: 6px;">
@@ -138,20 +260,7 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                         
                         <div style="margin-bottom: 8px;">
                             <div style="font-size: 12px; color: #333; margin-bottom: 3px;">
-                                <strong><i class="fas fa-calendar-alt" style="margin-right: 4px;"></i> Date & Time:</strong> <span style="color: #666;">${report.dateTime ? (() => {
-                                    const date = new Date(report.dateTime);
-                                    const options = { 
-                                        year: 'numeric' as const, 
-                                        month: 'long' as const, 
-                                        day: 'numeric' as const, 
-                                        hour: 'numeric' as const, 
-                                        minute: '2-digit' as const, 
-                                        second: '2-digit' as const, 
-                                        hour12: true, 
-                                        timeZone: 'UTC' 
-                                    };
-                                    return date.toLocaleDateString('en-US', options).replace(/,([^,]*)$/, ' at$1 UTC');
-                                })() : 'Not specified'}</span>
+                                <strong><i class="fas fa-calendar-alt" style="margin-right: 4px;"></i> Date & Time:</strong> <span style="color: #666;">' + formatDate('${report.dateTime}') + '</span>
                             </div>
                         </div>
                         
@@ -221,11 +330,18 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                         ` : ''}
                     </div>
                 \`);
+            } catch(e) {
+                debugLog('Error adding marker: ' + e.message);
+            }
             `).join('')}
+            debugLog('Finished adding all markers');
 
             // Add hotspot circles
-            ${hotspots.map(hotspot => `
-            L.circle([${hotspot.lat}, ${hotspot.lng}], {
+            debugLog('Adding ${hotspots.length} hotspot circles...');
+            ${hotspots.map((hotspot, index) => `
+            try {
+                debugLog('Adding hotspot ${index + 1}/${hotspots.length}');
+                L.circle([${hotspot.lat}, ${hotspot.lng}], {
                 color: '${hotspot.riskLevel === 'high' ? '#DC2626' : hotspot.riskLevel === 'medium' ? '#F59E0B' : '#10B981'}',
                 fillColor: '${hotspot.riskLevel === 'high' ? '#DC2626' : hotspot.riskLevel === 'medium' ? '#F59E0B' : '#10B981'}',
                 fillOpacity: 0.2,
@@ -259,7 +375,12 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                         </div>
                     </div>
                 \`);
+            } catch(e) {
+                debugLog('Error adding hotspot: ' + e.message);
+            }
             `).join('')}
+            debugLog('Finished adding all hotspots');
+            debugLog('Map setup complete!');
 
             // Disable scroll zoom initially to prevent conflicts with app scrolling
             map.scrollWheelZoom.disable();
@@ -291,17 +412,33 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
     </html>
   `;
 
+  console.log('🗺️ Generated HTML length:', leafletHTML.length, 'characters');
+  console.log('🗺️ HTML starts with:', leafletHTML.substring(0, 50));
+
   return (
     <WebView
       source={{ html: leafletHTML }}
-      style={{ width: mapWidth, height: mapHeight }}
+      style={{ width: mapWidth, height: mapHeight, backgroundColor: '#f0f0f0' }}
       javaScriptEnabled={true}
       domStorageEnabled={true}
       startInLoadingState={true}
       scalesPageToFit={true}
       scrollEnabled={false}
       bounces={false}
-      onLoadEnd={() => console.log('Map loaded')}
+      onLoadStart={() => console.log('🗺️ Map started loading...')}
+      onLoadEnd={() => console.log('🗺️ Map loaded successfully')}
+      onError={(syntheticEvent) => {
+        const { nativeEvent } = syntheticEvent;
+        console.error('WebView error:', nativeEvent);
+      }}
+      onMessage={(event) => {
+        console.log('WebView message:', event.nativeEvent.data);
+      }}
+      onHttpError={(syntheticEvent) => {
+        const { nativeEvent } = syntheticEvent;
+        console.error('WebView HTTP error:', nativeEvent);
+      }}
+      originWhitelist={['*']}
     />
   );
 };
@@ -326,6 +463,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
   const [reportType, setReportType] = useState('');
   const [reportDescription, setReportDescription] = useState('');
+  const [reportCategory, setReportCategory] = useState('Select type of incident');
+  const [isSensitive, setIsSensitive] = useState(false);
+  const [isCategoryDropdownVisible, setIsCategoryDropdownVisible] = useState(false);
   const [isUserLoggedIn, setIsUserLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -605,26 +745,57 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         );
         return;
       }
-    } catch (error) {
-      console.error('Error checking user eligibility:', error);
-      Alert.alert('Error', 'Unable to verify your eligibility. Please try again.');
-      return;
-    }
 
-    // Check location permission
-    try {
+      // Check location permission and get current location for vicinity check
       const locationService = LocationService.getInstance();
       const hasPermission = await locationService.requestLocationPermission();
-      if (!hasPermission) {
+      if (!hasPermission.granted) {
         Alert.alert(
           'Location Required', 
           'Location access is required to submit reports. Please enable location permissions and try again.'
         );
         return;
       }
+
+      // Get current location to check if user is within barangay vicinity
+      console.log('📍 Getting current location to verify barangay vicinity...');
+      const currentLocation = await locationService.getCurrentLocation();
+      
+      if (!currentLocation) {
+        Alert.alert('Error', 'Unable to get your current location. Please ensure location services are enabled and try again.');
+        return;
+      }
+
+      // Check if user is within their registered barangay's vicinity
+      const { isWithinBarangayVicinity } = await import('../utils/BulacanBarangays');
+      const vicinityCheck = isWithinBarangayVicinity(
+        userProfile.barangay,
+        currentLocation.latitude,
+        currentLocation.longitude
+      );
+
+      if (!vicinityCheck.isWithin) {
+        Alert.alert(
+          'Location Verification Failed',
+          `You must be within your registered barangay (${userProfile.barangay}) to submit a report.\n\n` +
+          `Your current location is ${vicinityCheck.distance.toFixed(2)} km away from ${userProfile.barangay}.\n` +
+          `You need to be within ${vicinityCheck.allowedRadius} km of your barangay to report incidents.\n\n` +
+          `Please go to your barangay or contact support if you believe this is an error.`,
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      console.log('✅ User is within barangay vicinity - proceeding with report submission');
+      
     } catch (error) {
-      console.error('Error checking location permission:', error);
-      Alert.alert('Error', 'Unable to check location permissions. Please try again.');
+      console.error('Error checking user eligibility:', error);
+      Alert.alert('Error', 'Unable to verify your eligibility. Please try again.');
+      return;
+    }
+
+    if (reportCategory === 'Select type of incident') {
+      Alert.alert('Error', 'Please select a category for the incident');
       return;
     }
 
@@ -641,23 +812,26 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     setIsSubmittingReport(true);
 
     try {
-      // Get current location
-      console.log('📍 Getting current location for report...');
+      // Get current location (we already verified it exists during vicinity check)
+      console.log('📍 Getting current location for report submission...');
       const locationService = LocationService.getInstance();
       const currentLocation = await locationService.getCurrentLocation();
 
       if (!currentLocation) {
         Alert.alert('Error', 'Unable to get your current location. Please ensure location services are enabled.');
+        setIsSubmittingReport(false);
         return;
       }
 
-      console.log('📍 Current location obtained:', currentLocation);
+      console.log('📍 Current location confirmed for report:', currentLocation);
 
       // Prepare report data with current location
       const reportData: CreateReportData = {
         barangay: 'Pinagbakahan', // Default barangay - could be enhanced with reverse geocoding
         description: reportDescription.trim(),
         incidentType: reportType.trim(),
+        category: reportCategory !== 'Select type of incident' ? reportCategory : undefined,
+        isSensitive: isSensitive,
         latitude: currentLocation.latitude,
         longitude: currentLocation.longitude,
         submittedByEmail: currentUser.email || 'unknown@email.com'
@@ -694,6 +868,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         setIsReportModalVisible(false);
         setReportType('');
         setReportDescription('');
+        setReportCategory('Select type of incident');
+        setIsSensitive(false);
         setSelectedMedia([]); // Clear selected media
         
         // Show success message
@@ -1306,6 +1482,59 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
               </View>
               
               <View style={styles.reportForm}>
+              {/* Category Dropdown */}
+              <Text style={styles.reportLabel}>Category</Text>
+              <TouchableOpacity 
+                style={styles.categoryDropdownButton}
+                onPress={() => setIsCategoryDropdownVisible(!isCategoryDropdownVisible)}
+              >
+                <Text style={[styles.categoryDropdownText, reportCategory === 'Select type of incident' && styles.placeholderText]}>
+                  {reportCategory}
+                </Text>
+                <FontAwesome name={isCategoryDropdownVisible ? "chevron-up" : "chevron-down"} size={14} color="#6B7280" />
+              </TouchableOpacity>
+              
+              {isCategoryDropdownVisible && (
+                <ScrollView style={styles.categoryDropdown} nestedScrollEnabled={true}>
+                  {[
+                    'Theft',
+                    'Reports/Agreement',
+                    'Accident',
+                    'Debt / Unpaid Wages Report',
+                    'Defamation Complaint',
+                    'Assault/Harassment',
+                    'Property Damage/Incident',
+                    'Animal Incident',
+                    'Verbal Abuse and Threats',
+                    'Alarm and Scandal',
+                    'Lost Items',
+                    'Scam/Fraud',
+                    'Drugs Addiction',
+                    'Missing Person',
+                    'Others'
+                  ].map((category, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.categoryOption,
+                        reportCategory === category && styles.selectedCategoryOption
+                      ]}
+                      onPress={() => {
+                        setReportCategory(category);
+                        setIsCategoryDropdownVisible(false);
+                      }}
+                    >
+                      <Text style={[
+                        styles.categoryOptionText,
+                        reportCategory === category && styles.selectedCategoryOptionText
+                      ]}>
+                        {category}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+
               <Text style={styles.reportLabel}>Type of incident</Text>
               <TextInput
                 style={styles.reportInput}
@@ -1325,6 +1554,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
                 multiline
                 numberOfLines={4}
               />
+
+              {/* Mark as Sensitive Toggle */}
+              <TouchableOpacity 
+                style={styles.sensitiveToggle}
+                onPress={() => setIsSensitive(!isSensitive)}
+              >
+                <View style={[styles.checkbox, isSensitive && styles.checkboxChecked]}>
+                  {isSensitive && <FontAwesome name="check" size={14} color="white" />}
+                </View>
+                <Text style={styles.sensitiveLabel}>Mark as sensitive</Text>
+              </TouchableOpacity>
 
               <Text style={styles.reportLabel}>Add Media</Text>
               <View style={styles.mediaButtons}>
@@ -1961,6 +2201,77 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     flex: 1,
+  },
+  categoryDropdownButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#F9FAFB',
+    marginBottom: 8,
+  },
+  categoryDropdownText: {
+    fontSize: 16,
+    color: '#111827',
+    flex: 1,
+  },
+  placeholderText: {
+    color: '#9CA3AF',
+  },
+  categoryDropdown: {
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    backgroundColor: 'white',
+    marginBottom: 16,
+  },
+  categoryOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  selectedCategoryOption: {
+    backgroundColor: '#3B82F6',
+  },
+  categoryOptionText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  selectedCategoryOptionText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  sensitiveToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'white',
+  },
+  checkboxChecked: {
+    backgroundColor: '#EF4444',
+    borderColor: '#EF4444',
+  },
+  sensitiveLabel: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '500',
   },
 });
 
