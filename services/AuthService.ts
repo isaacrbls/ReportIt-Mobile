@@ -96,7 +96,9 @@ export class AuthService {
         firstName: signupData.firstName,
         lastName: signupData.lastName,
         username: signupData.username,
-        email: signupData.email
+        email: signupData.email,
+        barangay: signupData.barangay,
+        city: signupData.city
       };
 
       console.log('Attempting to create user profile in database...');

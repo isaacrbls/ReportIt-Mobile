@@ -324,7 +324,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
         console.log('Signup successful for user:', result.user.uid);
         Alert.alert(
           'Account Created!', 
-          'Your Firebase authentication account has been successfully created. You can now sign in!\n\n(Note: User profile data will be saved once database permissions are configured)', 
+          'Your account has been successfully created with all your profile information saved to the database. You can now sign in!', 
           [
             { 
               text: 'OK', 
