@@ -1,4 +1,5 @@
 import * as Location from 'expo-location';
+import { Alert, Linking, Platform } from 'react-native';
 
 export interface LocationCoords {
   latitude: number;
@@ -51,15 +52,79 @@ class LocationService {
     }
   }
 
+  /**
+   * Prompts user to enable location services in device settings
+   */
+  private promptEnableLocationServices(): Promise<boolean> {
+    return new Promise((resolve) => {
+      Alert.alert(
+        'Location Services Disabled',
+        'Please enable location services in your device settings to use location features.',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => resolve(false),
+          },
+          {
+            text: 'Open Settings',
+            onPress: () => {
+              Linking.openSettings();
+              resolve(false);
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+    });
+  }
+
+  /**
+   * Prompts user to grant location permission in device settings
+   */
+  private promptGrantLocationPermission(): Promise<boolean> {
+    return new Promise((resolve) => {
+      Alert.alert(
+        'Location Permission Required',
+        'ReportIt needs location access to provide accurate risk assessments. Please allow location access in your device settings.',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => resolve(false),
+          },
+          {
+            text: 'Open Settings',
+            onPress: () => {
+              Linking.openSettings();
+              resolve(false);
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+    });
+  }
+
   async getCurrentLocation(): Promise<LocationCoords | null> {
     try {
+      // First check if location services are enabled
+      const servicesEnabled = await this.isLocationEnabled();
+      if (!servicesEnabled) {
+        console.warn('⚠️ Location services are disabled');
+        await this.promptEnableLocationServices();
+        return null;
+      }
+
       const permissionResult = await this.requestLocationPermission();
       if (!permissionResult.granted) {
-        throw new Error('Location permission not granted');
+        console.warn('⚠️ Location permission not granted:', permissionResult.status);
+        await this.promptGrantLocationPermission();
+        return null;
       }
 
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+        accuracy: Location.Accuracy.Balanced,
       });
 
       this.currentLocation = {
@@ -72,9 +137,18 @@ class LocationService {
         speed: location.coords.speed ?? undefined,
       };
 
+      console.log('✅ Location retrieved successfully:', this.currentLocation.latitude, this.currentLocation.longitude);
       return this.currentLocation;
-    } catch (error) {
-      console.error('Error getting current location:', error);
+    } catch (error: any) {
+      console.error('❌ Error getting current location:', error.message || error);
+      
+      // Show a generic error alert for unexpected errors
+      Alert.alert(
+        'Location Error',
+        'Unable to get your current location. Please try again.',
+        [{ text: 'OK' }]
+      );
+      
       return null;
     }
   }

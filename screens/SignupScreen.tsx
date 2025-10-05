@@ -176,6 +176,8 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
       setEmail(formData.email || '');
       setPassword(formData.password || '');
       setConfirmPassword(formData.confirmPassword || '');
+      setSelectedBarangay(formData.selectedBarangay || '');
+      setSelectedCity(formData.selectedCity || '');
     }
   }, [route?.params?.termsAccepted, route?.params?.formData]);
 
@@ -546,7 +548,9 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                   username,
                   email,
                   password,
-                  confirmPassword
+                  confirmPassword,
+                  selectedBarangay,
+                  selectedCity
                 };
                 navigation.navigate('TermsAndConditions', { 
                   fromSignup: true,
@@ -566,7 +570,9 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                     username,
                     email,
                     password,
-                    confirmPassword
+                    confirmPassword,
+                    selectedBarangay,
+                    selectedCity
                   };
                   navigation.navigate('TermsAndConditions', { 
                     fromSignup: true,
@@ -583,7 +589,9 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                     username,
                     email,
                     password,
-                    confirmPassword
+                    confirmPassword,
+                    selectedBarangay,
+                    selectedCity
                   };
                   navigation.navigate('TermsAndConditions', { 
                     fromSignup: true,

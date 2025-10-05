@@ -4,9 +4,10 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { View, ActivityIndicator, BackHandler, Platform } from 'react-native';
+import { View, ActivityIndicator, BackHandler, Platform, AppState, AppStateStatus } from 'react-native';
 import { LaunchUtils } from './utils/LaunchUtils';
 import { NavigationHelper } from './utils/NavigationHelper';
+import { AuthProvider, useAuth } from './services/AuthContext';
 
 import SplashScreen from './screens/SplashScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
@@ -23,13 +24,44 @@ import EditProfileScreen from './screens/EditProfileScreen';
 
 const Stack = createStackNavigator();
 
-export default function App() {
+function AppNavigator() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
+  const { user, loading: authLoading, isAuthenticated } = useAuth();
 
   useEffect(() => {
     checkFirstLaunch();
+  }, []);
+
+  // App lifecycle handler (onResume, onPause, onShutdown)
+  useEffect(() => {
+    console.log('🔄 Setting up app lifecycle listener');
+    
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      console.log(`🔄 App state changed to: ${nextAppState}`);
+      
+      if (nextAppState === 'active') {
+        console.log('✅ App has come to foreground (onResume)');
+        // App resumed - you can refresh data, re-check auth, resume operations here
+      } else if (nextAppState === 'background') {
+        console.log('⏸️ App has gone to background (onPause)');
+        // App paused - you can save state, cleanup, pause operations here
+      } else if (nextAppState === 'inactive') {
+        console.log('🔄 App is transitioning (onInactive)');
+        // App is transitioning between states (e.g., incoming call, control center)
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    // Log initial app state
+    console.log(`🔄 Initial app state: ${AppState.currentState}`);
+
+    return () => {
+      console.log('🔄 Removing app lifecycle listener');
+      subscription?.remove();
+    };
   }, []);
 
   const checkFirstLaunch = async () => {
@@ -65,7 +97,8 @@ export default function App() {
     );
   }
 
-  if (isLoading) {
+  // Show loading while checking auth state or first launch
+  if (isLoading || authLoading) {
     return (
       <SafeAreaProvider>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EF4444' }}>
@@ -75,7 +108,19 @@ export default function App() {
     );
   }
 
-  const initialRouteName = isFirstLaunch ? "Welcome" : "Login";
+  // Determine initial route:
+  // 1. If user is authenticated, go to Map
+  // 2. If first launch, go to Welcome
+  // 3. Otherwise, go to Login
+  const initialRouteName = isAuthenticated 
+    ? "Map" 
+    : (isFirstLaunch ? "Welcome" : "Login");
+
+  console.log('🔐 Auth state:', {
+    isAuthenticated,
+    userEmail: user?.email || 'No user',
+    initialRoute: initialRouteName
+  });
 
   const handleNavigationStateChange = (state: any) => {
     if (isFirstLaunch && state?.routes) {
@@ -208,5 +253,14 @@ export default function App() {
         <StatusBar style="auto" />
       </NavigationContainer>
     </SafeAreaProvider>
+  );
+}
+
+// Wrapper component with AuthProvider
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppNavigator />
+    </AuthProvider>
   );
 }
