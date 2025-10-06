@@ -5,6 +5,7 @@ import {
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
+  sendPasswordResetEmail,
   User,
   AuthError
 } from 'firebase/auth';
@@ -19,6 +20,13 @@ export interface AuthResult {
 
 export interface SignupData extends CreateUserProfileData {
   password: string;
+}
+
+export interface PasswordResetResult {
+  success: boolean;
+  message?: string;
+  source?: 'django' | 'nodejs' | 'firebase';
+  error?: string;
 }
 
 export class AuthService {
@@ -197,6 +205,188 @@ export class AuthService {
    */
   static getCurrentUser(): User | null {
     return auth.currentUser;
+  }
+
+  /**
+   * Request password reset with fallback strategy:
+   * 1. Try Django backend API
+   * 2. Fallback to Node.js email service
+   * 3. Final fallback to Firebase Auth
+   */
+  static async requestPasswordReset(email: string): Promise<PasswordResetResult> {
+    if (!email || email.indexOf('@') === -1) {
+      return {
+        success: false,
+        error: 'Please enter a valid email address.'
+      };
+    }
+
+    try {
+      // Try Django backend first
+      try {
+        console.log('🔄 Attempting Django password reset for:', email);
+        const djangoResponse = await fetch('http://127.0.0.1:8000/api/auth/forgot-password/', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({ email })
+        });
+        
+        if (djangoResponse.ok) {
+          const data = await djangoResponse.json();
+          console.log('✅ Django password reset successful');
+          return { 
+            success: true,
+            message: 'Password reset email sent via Django backend',
+            source: 'django'
+          };
+        } else {
+          console.warn('⚠️ Django responded with error:', djangoResponse.status);
+        }
+      } catch (djangoError: any) {
+        console.warn('⚠️ Django password reset failed:', djangoError.message);
+      }
+
+      // Try Node.js fallback (if you have a custom backend)
+      try {
+        console.log('🔄 Attempting Node.js password reset for:', email);
+        const nodeResponse = await fetch('/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({ email })
+        });
+        
+        if (nodeResponse.ok) {
+          const data = await nodeResponse.json();
+          console.log('✅ Node.js password reset successful');
+          return { 
+            success: true,
+            message: 'Password reset email sent via Node.js backend',
+            source: 'nodejs'
+          };
+        } else {
+          console.warn('⚠️ Node.js responded with error:', nodeResponse.status);
+        }
+      } catch (nodeError: any) {
+        console.warn('⚠️ Node.js password reset failed:', nodeError.message);
+      }
+
+      // Final fallback to Firebase Auth
+      console.log('🔄 Using Firebase Auth fallback for:', email);
+      await sendPasswordResetEmail(auth, email);
+      console.log('✅ Firebase password reset email sent');
+      
+      return {
+        success: true,
+        message: 'Password reset email sent. Please check your inbox and follow the instructions.',
+        source: 'firebase'
+      };
+
+    } catch (error: any) {
+      console.error('❌ All password reset methods failed:', error);
+      return {
+        success: false,
+        error: this.getPasswordResetErrorMessage(error)
+      };
+    }
+  }
+
+  /**
+   * Reset password with token (for custom backend implementations)
+   */
+  static async resetPasswordWithToken(token: string, newPassword: string): Promise<PasswordResetResult> {
+    if (!token || !newPassword) {
+      return {
+        success: false,
+        error: 'Token and new password are required.'
+      };
+    }
+
+    try {
+      // Try Django backend first
+      try {
+        const djangoResponse = await fetch('http://127.0.0.1:8000/api/auth/reset-password/', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({ token, password: newPassword })
+        });
+        
+        if (djangoResponse.ok) {
+          const data = await djangoResponse.json();
+          return { 
+            success: true,
+            message: 'Password reset successful via Django backend',
+            source: 'django'
+          };
+        }
+      } catch (djangoError: any) {
+        console.warn('Django password reset with token failed:', djangoError.message);
+      }
+
+      // Try Node.js fallback
+      try {
+        const nodeResponse = await fetch('/api/auth/reset-password', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({ token, password: newPassword })
+        });
+        
+        if (nodeResponse.ok) {
+          const data = await nodeResponse.json();
+          return { 
+            success: true,
+            message: 'Password reset successful via Node.js backend',
+            source: 'nodejs'
+          };
+        }
+      } catch (nodeError: any) {
+        console.warn('Node.js password reset with token failed:', nodeError.message);
+      }
+
+      return {
+        success: false,
+        error: 'Password reset token is invalid or expired. Please request a new password reset.'
+      };
+
+    } catch (error: any) {
+      console.error('Password reset with token failed:', error);
+      return {
+        success: false,
+        error: 'Failed to reset password. Please try again.'
+      };
+    }
+  }
+
+  /**
+   * Convert password reset errors to user-friendly messages
+   */
+  private static getPasswordResetErrorMessage(error: any): string {
+    if (error.code) {
+      switch (error.code) {
+        case 'auth/user-not-found':
+          return 'No account found with this email address.';
+        case 'auth/invalid-email':
+          return 'Please enter a valid email address.';
+        case 'auth/network-request-failed':
+          return 'Network error. Please check your internet connection.';
+        case 'auth/too-many-requests':
+          return 'Too many password reset requests. Please try again later.';
+        default:
+          return error.message || 'Failed to send password reset email.';
+      }
+    }
+    return error.message || 'Failed to send password reset email. Please try again.';
   }
 
   /**

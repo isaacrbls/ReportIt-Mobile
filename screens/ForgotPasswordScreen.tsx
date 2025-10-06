@@ -6,6 +6,8 @@ import {
   TextInput,
   TouchableOpacity,
   SafeAreaView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import {
@@ -15,6 +17,7 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
+import { AuthService } from '../services/AuthService';
 
 
 const ShieldIcon = ({ size = 24, color = "#EF4444" }) => (
@@ -54,19 +57,57 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ navigation 
   });
 
   const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
 
   if (!fontsLoaded) {
     return null;
   }
 
-  const handleSendVerificationCode = () => {
+  const handleSendVerificationCode = async () => {
+    if (!email || email.indexOf('@') === -1) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.');
+      return;
+    }
 
-    if (email.includes('@')) {
-      navigation.navigate('VerifyEmail', { email });
+    setLoading(true);
+    try {
+      console.log('🔄 Requesting password reset for:', email);
+      const result = await AuthService.requestPasswordReset(email);
+      
+      if (result.success) {
+        // Show success message with different info based on source
+        let message = result.message || 'Password reset email sent successfully.';
+        let title = 'Email Sent';
+        
+        if (result.source === 'firebase') {
+          message += '\n\nCheck your email inbox and spam folder for the reset link.';
+        } else if (result.source === 'django') {
+          message += '\n\nProcessed by Django backend.';
+        } else if (result.source === 'nodejs') {
+          message += '\n\nProcessed by Node.js backend.';
+        }
+
+        Alert.alert(title, message, [
+          {
+            text: 'Back to Login',
+            onPress: () => {
+              // Navigate back to login since password reset is handled via email
+              navigation.navigate('Login');
+            }
+          }
+        ]);
+      } else {
+        Alert.alert('Error', result.error || 'Failed to send password reset email.');
+      }
+    } catch (error: any) {
+      console.error('❌ Password reset request failed:', error);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const isButtonDisabled = !email.includes('@');
+  const isButtonDisabled = !email || email.indexOf('@') === -1 || loading;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -108,7 +149,14 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ navigation 
             onPress={handleSendVerificationCode}
             disabled={isButtonDisabled}
           >
-            <Text style={styles.sendButtonText}>Send Verification Code</Text>
+            {loading ? (
+              <View style={styles.buttonContent}>
+                <ActivityIndicator size="small" color="white" style={styles.loadingIcon} />
+                <Text style={styles.sendButtonText}>Sending...</Text>
+              </View>
+            ) : (
+              <Text style={styles.sendButtonText}>Send Verification Code</Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.loginContainer}>
@@ -203,6 +251,14 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingIcon: {
+    marginRight: 8,
   },
   loginContainer: {
     flexDirection: 'row',
