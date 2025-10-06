@@ -33,11 +33,32 @@ import {
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
+// Responsive utility functions
+const isTablet = () => screenWidth >= 768;
+const isLargeTablet = () => screenWidth >= 1024;
+
+const responsiveSize = (phone: number, tablet: number, largeTablet?: number) => {
+  if (isLargeTablet() && largeTablet) return largeTablet;
+  if (isTablet()) return tablet;
+  return phone;
+};
+
+const responsiveFontSize = (size: number) => {
+  const scale = screenWidth / 375; // Base on iPhone SE width
+  const newSize = size * scale;
+  if (isTablet()) return Math.round(newSize * 0.9); // Slightly smaller on tablets
+  return Math.round(newSize);
+};
+
+const responsivePadding = (size: number) => {
+  return responsiveSize(size, size * 1.5, size * 2);
+};
+
 // Inline SVG icons for each category (optimized for WebView display)
 // These SVGs are embedded directly as strings to avoid file:// URI issues
 const CATEGORY_INLINE_SVGS: { [key: string]: string } = {
   'Theft': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="8" y="10" width="8" height="9" rx="1" fill="#960C12"/><path d="M9 10V7a3 3 0 116 0v3" stroke="#960C12" stroke-width="2" stroke-linecap="round"/></svg>',
-  'Reports/Agreement': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="#960C12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 2v6h6M8 13h8M8 17h8" stroke="#960C12" stroke-width="2" stroke-linecap="round"/></svg>',
+  'Reports/Agreement': '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="1080" height="1350"><path d="M0 0 C0.71080102 -0.00350607 1.42160205 -0.00701215 2.1539425 -0.01062447 C4.54194905 -0.01994764 6.92971223 -0.01501283 9.317729 -0.01015663 C11.04463611 -0.01389243 12.77154153 -0.01849367 14.49844426 -0.02388728 C19.24898137 -0.03614138 23.99944818 -0.03585397 28.7499975 -0.03349853 C33.87145762 -0.03309097 38.99289502 -0.04412366 44.1143446 -0.05361366 C54.15014516 -0.0702378 64.18592222 -0.07572385 74.2217354 -0.07683842 C82.37801633 -0.07778821 90.53428949 -0.08189508 98.69056797 -0.08823967 C121.80693026 -0.10585586 144.92327397 -0.11507794 168.03964303 -0.11357872 C169.90957654 -0.11345885 169.90957654 -0.11345885 171.81728649 -0.11333656 C173.06542809 -0.1132548 174.31356969 -0.11317304 175.59953376 -0.1130888 C195.83083789 -0.11227577 216.0620676 -0.13141674 236.2933502 -0.1596133 C257.05866031 -0.18832615 277.8239341 -0.20215447 298.58926457 -0.20042574 C310.25064943 -0.19976129 321.91195625 -0.20527766 333.57332325 -0.22678185 C343.50162567 -0.24497259 353.4298147 -0.2493583 363.35812656 -0.235763 C368.42442342 -0.22922275 373.49050261 -0.22915431 378.55677891 -0.2464695 C383.19490824 -0.26215847 387.83264654 -0.25937935 392.47076609 -0.24190123 C394.14840774 -0.23882213 395.82607827 -0.24249793 397.50368587 -0.25362138 C413.85478336 -0.35485522 413.85478336 -0.35485522 419.86342907 4.25726891 C424.07872541 10.43945647 423.27340235 17.60753296 423.22419262 24.8549099 ...',
   'Accident': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M7 16l-4-4m0 0l4-4m-4 4h18M17 8l4 4m0 0l-4 4" stroke="#960C12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="2" fill="#960C12"/></svg>',
   'Debt / Unpaid Wages Report': '💰',
   'Defamation Complaint': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" stroke="#960C12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 10h8M8 14h4" stroke="#960C12" stroke-width="2" stroke-linecap="round"/></svg>',
@@ -69,7 +90,10 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
   });
 
   const mapWidth = screenWidth;
-  const mapHeight = screenHeight - 200;
+  // Responsive map height - more space on tablets
+  const mapHeight = isTablet() 
+    ? screenHeight - responsiveSize(180, 200, 220)
+    : screenHeight - 200;
 
   const mapCenter = userLocation 
     ? [userLocation.latitude, userLocation.longitude]
@@ -1756,23 +1780,23 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#EF4444',
-    paddingTop: 20,
-    paddingBottom: 20,
-    paddingHorizontal: 24,
+    paddingTop: responsiveSize(20, 25, 30),
+    paddingBottom: responsiveSize(20, 25, 30),
+    paddingHorizontal: responsivePadding(24),
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   menuButton: {
-    width: 44,
-    height: 44,
+    width: responsiveSize(44, 52, 60),
+    height: responsiveSize(44, 52, 60),
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
+    borderRadius: responsiveSize(8, 10, 12),
   },
   headerTitle: {
     color: 'white',
-    fontSize: 18,
+    fontSize: responsiveFontSize(18),
     fontFamily: 'Poppins_700Bold',
   },
   headerStatus: {
@@ -1785,7 +1809,7 @@ const styles = StyleSheet.create({
   },
   locationStatusText: {
     color: 'white',
-    fontSize: 12,
+    fontSize: responsiveFontSize(12),
     fontFamily: 'Poppins_600SemiBold',
   },
   reportsStatus: {
@@ -1796,23 +1820,23 @@ const styles = StyleSheet.create({
   },
   reportsStatusText: {
     color: 'white',
-    fontSize: 11,
+    fontSize: responsiveFontSize(11),
     fontFamily: 'Poppins_400Regular',
   },
   searchContainer: {
     position: 'absolute',
-    top: 90,
-    left: 16,
-    right: 16,
+    top: responsiveSize(90, 110, 130),
+    left: responsivePadding(16),
+    right: responsivePadding(16),
     zIndex: 20,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'white',
-    borderRadius: 24,
-    paddingHorizontal: 25,
-    paddingVertical: 8,
+    borderRadius: responsiveSize(24, 28, 32),
+    paddingHorizontal: responsivePadding(25),
+    paddingVertical: responsiveSize(8, 12, 14),
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -1824,8 +1848,8 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
+    marginLeft: responsiveSize(12, 16, 20),
+    fontSize: responsiveFontSize(16),
     color: '#111827',
     fontFamily: 'Poppins_400Regular',
   },
@@ -1835,14 +1859,14 @@ const styles = StyleSheet.create({
   },
   fabContainer: {
     position: 'absolute',
-    right: 16,
-    bottom: 140,
-    gap: 16,
+    right: responsivePadding(16),
+    bottom: responsiveSize(140, 160, 180),
+    gap: responsiveSize(16, 20, 24),
   },
   fab: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: responsiveSize(56, 64, 72),
+    height: responsiveSize(56, 64, 72),
+    borderRadius: responsiveSize(28, 32, 36),
     backgroundColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1864,18 +1888,19 @@ const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
     backgroundColor: '#EF4444',
-    paddingVertical: 20,
-    paddingHorizontal: 32,
-    justifyContent: 'space-around',
+    paddingVertical: responsiveSize(20, 24, 28),
+    paddingHorizontal: responsivePadding(32),
+    justifyContent: isTablet() ? 'center' : 'space-around',
+    gap: isTablet() ? responsiveSize(40, 60, 80) : 0,
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
   },
   navItem: {
-    padding: 16,
-    borderRadius: 12,
+    padding: responsiveSize(16, 20, 24),
+    borderRadius: responsiveSize(12, 14, 16),
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 64,
+    minWidth: responsiveSize(64, 80, 96),
   },
   activeNavItem: {
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
@@ -1901,27 +1926,27 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 280,
+    width: responsiveSize(280, 360, 400),
     backgroundColor: '#EF4444',
-    paddingTop: 60,
-    paddingHorizontal: 20,
+    paddingTop: responsiveSize(60, 70, 80),
+    paddingHorizontal: responsivePadding(20),
     zIndex: 1001,
   },
   profileContainer: {
     alignItems: 'center',
-    paddingVertical: 30,
+    paddingVertical: responsiveSize(30, 35, 40),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.2)',
-    marginBottom: 20,
+    marginBottom: responsiveSize(20, 25, 30),
   },
   profileImageContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: responsiveSize(80, 100, 120),
+    height: responsiveSize(80, 100, 120),
+    borderRadius: responsiveSize(40, 50, 60),
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: responsiveSize(12, 16, 20),
   },
   profileImage: {
     width: 80,
@@ -1945,14 +1970,14 @@ const styles = StyleSheet.create({
   },
   profileName: {
     color: 'white',
-    fontSize: 18,
+    fontSize: responsiveFontSize(18),
     fontWeight: 'bold',
     marginBottom: 4,
     textAlign: 'center',
   },
   profileEmail: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
+    fontSize: responsiveFontSize(14),
     marginBottom: 4,
     textAlign: 'center',
   },
@@ -2014,14 +2039,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuItem: {
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingVertical: responsiveSize(16, 20, 24),
+    paddingHorizontal: responsiveSize(16, 20, 24),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   menuItemText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: responsiveFontSize(16),
   },
   permissionModalOverlay: {
     flex: 1,
@@ -2032,11 +2057,11 @@ const styles = StyleSheet.create({
   },
   permissionModal: {
     backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 32,
+    borderRadius: responsiveSize(20, 24, 28),
+    padding: responsivePadding(32),
     alignItems: 'center',
     width: '100%',
-    maxWidth: 340,
+    maxWidth: responsiveSize(340, 450, 500),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.25,
@@ -2053,17 +2078,17 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   permissionTitle: {
-    fontSize: 20,
+    fontSize: responsiveFontSize(20),
     fontWeight: '700',
     color: '#1F2937',
     marginBottom: 12,
     textAlign: 'center',
   },
   permissionText: {
-    fontSize: 14,
+    fontSize: responsiveFontSize(14),
     color: '#6B7280',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: responsiveFontSize(22),
     marginBottom: 28,
     paddingHorizontal: 8,
   },
@@ -2114,23 +2139,23 @@ const styles = StyleSheet.create({
   },
   reportModal: {
     backgroundColor: 'white',
-    borderRadius: 20,
-    height: '85%',
-    width: '100%',
-    maxWidth: 400,
-    paddingTop: 24,
-    paddingHorizontal: 24,
+    borderRadius: responsiveSize(20, 24, 28),
+    height: isTablet() ? '80%' : '85%',
+    width: isTablet() ? '90%' : '100%',
+    maxWidth: responsiveSize(400, 600, 700),
+    paddingTop: responsivePadding(24),
+    paddingHorizontal: responsivePadding(24),
     display: 'flex',
     flexDirection: 'column',
   },
   reportModalTitle: {
-    fontSize: 16,
+    fontSize: responsiveFontSize(16),
     color: '#6B7280',
     textAlign: 'center',
     marginBottom: 8,
   },
   reportModalSubtitle: {
-    fontSize: 24,
+    fontSize: responsiveFontSize(24),
     fontWeight: 'bold',
     color: '#111827',
     textAlign: 'center',
@@ -2148,7 +2173,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   reportLabel: {
-    fontSize: 14,
+    fontSize: responsiveFontSize(14),
     fontWeight: '500',
     color: '#111827',
     marginBottom: 8,
@@ -2157,10 +2182,10 @@ const styles = StyleSheet.create({
   reportInput: {
     borderWidth: 1,
     borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
+    borderRadius: responsiveSize(8, 10, 12),
+    paddingHorizontal: responsiveSize(16, 20, 24),
+    paddingVertical: responsiveSize(12, 14, 16),
+    fontSize: responsiveFontSize(16),
     color: '#111827',
     backgroundColor: '#F9FAFB',
   },
