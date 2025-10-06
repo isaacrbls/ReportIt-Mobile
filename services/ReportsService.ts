@@ -240,10 +240,14 @@ export class ReportsService {
    */
   static async createReport(reportData: CreateReportData): Promise<{ success: boolean; reportId?: string; error?: string }> {
     try {
+      console.log('🔄 Creating report in Firestore with data:', reportData);
+      
       const newReport = {
         Barangay: reportData.barangay,
         Description: reportData.description,
         IncidentType: reportData.incidentType,
+        Category: reportData.category || 'Others',
+        IsSensitive: reportData.isSensitive || false,
         GeoLocation: new GeoPoint(reportData.latitude, reportData.longitude),
         Latitude: reportData.latitude,
         Longitude: reportData.longitude,
@@ -252,20 +256,40 @@ export class ReportsService {
         DateTime: new Date().toISOString(),
         MediaType: reportData.mediaType || null,
         MediaURL: reportData.mediaURL || null,
-        hasMedia: reportData.mediaURL ? true : false
+        hasMedia: reportData.mediaURL ? true : false,
+        createdAt: Timestamp.now()
       };
       
+      console.log('📝 Attempting to add document to Firestore reports collection...');
       const docRef = await addDoc(collection(firestore, 'reports'), newReport);
+      console.log('✅ Document successfully created with ID:', docRef.id);
       
       return {
         success: true,
         reportId: docRef.id
       };
     } catch (error: any) {
-      console.error('Error creating report:', error);
+      console.error('❌ Error creating report:', error);
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        stack: error.stack
+      });
+      
+      // Provide more specific error messages based on error code
+      let errorMessage = error.message || 'Failed to create report';
+      
+      if (error.code === 'permission-denied') {
+        errorMessage = 'Permission denied. Please check Firestore security rules.';
+      } else if (error.code === 'unavailable') {
+        errorMessage = 'Database is currently unavailable. Please try again.';
+      } else if (error.code === 'failed-precondition') {
+        errorMessage = 'Database configuration issue. Please contact support.';
+      }
+      
       return {
         success: false,
-        error: error.message || 'Failed to create report'
+        error: errorMessage
       };
     }
   }

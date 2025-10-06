@@ -808,7 +808,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       return;
     }
 
-    // Check user's barangay eligibility
+    // 🔓 SPECIAL ADMIN BYPASS: Only emmnlisaac@gmail.com can report from anywhere
+    const isAdminUser = currentUser.email === 'emmnlisaac@gmail.com';
+    
+    if (isAdminUser) {
+      console.log('🔓 ADMIN USER DETECTED - Bypassing all location restrictions for:', currentUser.email);
+    }
+
+    // Check user's barangay eligibility (SKIP for admin user)
     try {
       const userProfileResult = await UserService.getCurrentUserProfile();
       if (!userProfileResult.success || !userProfileResult.data) {
@@ -817,7 +824,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       }
 
       const userProfile = userProfileResult.data;
-      if (!isReportingAllowed(userProfile.barangay)) {
+      
+      // SKIP barangay eligibility check ONLY for admin user
+      if (!isAdminUser && !isReportingAllowed(userProfile.barangay)) {
         Alert.alert(
           'Reporting Not Available', 
           `Sorry, reporting is currently only available for residents of Pinagbakahan, Look, Bulihan, Dakila, and Mojon barangays. Your registered barangay: ${userProfile.barangay}`
@@ -845,27 +854,32 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         return;
       }
 
-      // Check if user is within their registered barangay's vicinity
-      const { isWithinBarangayVicinity } = await import('../utils/BulacanBarangays');
-      const vicinityCheck = isWithinBarangayVicinity(
-        userProfile.barangay,
-        currentLocation.latitude,
-        currentLocation.longitude
-      );
-
-      if (!vicinityCheck.isWithin) {
-        Alert.alert(
-          'Location Verification Failed',
-          `You must be within your registered barangay (${userProfile.barangay}) to submit a report.\n\n` +
-          `Your current location is ${vicinityCheck.distance.toFixed(2)} km away from ${userProfile.barangay}.\n` +
-          `You need to be within ${vicinityCheck.allowedRadius} km of your barangay to report incidents.\n\n` +
-          `Please go to your barangay or contact support if you believe this is an error.`,
-          [{ text: 'OK' }]
+      // SKIP vicinity check ONLY for admin user
+      if (!isAdminUser) {
+        // Check if user is within their registered barangay's vicinity
+        const { isWithinBarangayVicinity } = await import('../utils/BulacanBarangays');
+        const vicinityCheck = isWithinBarangayVicinity(
+          userProfile.barangay,
+          currentLocation.latitude,
+          currentLocation.longitude
         );
-        return;
-      }
 
-      console.log('✅ User is within barangay vicinity - proceeding with report submission');
+        if (!vicinityCheck.isWithin) {
+          Alert.alert(
+            'Location Verification Failed',
+            `You must be within your registered barangay (${userProfile.barangay}) to submit a report.\n\n` +
+            `Your current location is ${vicinityCheck.distance.toFixed(2)} km away from ${userProfile.barangay}.\n` +
+            `You need to be within ${vicinityCheck.allowedRadius} km of your barangay to report incidents.\n\n` +
+            `Please go to your barangay or contact support if you believe this is an error.`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        
+        console.log('✅ User is within barangay vicinity - proceeding with report submission');
+      } else {
+        console.log('🔓 ADMIN USER - Skipping vicinity verification, can report from anywhere');
+      }
       
     } catch (error) {
       console.error('Error checking user eligibility:', error);
@@ -904,17 +918,30 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
 
       console.log('📍 Current location confirmed for report:', currentLocation);
 
+      // Get user's actual barangay from profile
+      const userProfileResult = await UserService.getCurrentUserProfile();
+      const userBarangay = userProfileResult.success && userProfileResult.data 
+        ? userProfileResult.data.barangay 
+        : 'Pinagbakahan'; // Fallback to default
+
       // Prepare report data with current location
       const reportData: CreateReportData = {
-        barangay: 'Pinagbakahan', // Default barangay - could be enhanced with reverse geocoding
+        barangay: userBarangay,
         description: reportDescription.trim(),
         incidentType: reportType.trim(),
-        category: reportCategory !== 'Select type of incident' ? reportCategory : undefined,
+        category: reportCategory !== 'Select type of incident' ? reportCategory : 'Others',
         isSensitive: isSensitive,
         latitude: currentLocation.latitude,
         longitude: currentLocation.longitude,
         submittedByEmail: currentUser.email || 'unknown@email.com'
       };
+      
+      console.log('📋 Report data prepared:', {
+        barangay: reportData.barangay,
+        category: reportData.category,
+        incidentType: reportData.incidentType,
+        location: `${reportData.latitude}, ${reportData.longitude}`
+      });
 
       // Add media information if any media is selected
       if (selectedMedia.length > 0) {
