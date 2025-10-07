@@ -175,75 +175,22 @@ const MapView = React.forwardRef<any, { userLocation: LocationCoords | null; rep
                 className: 'custom-user-pin'
             });
 
-            // Incident type to Font Awesome icon mapping
+            // Incident type to Font Awesome icon mapping (exact categories from database)
             var incidentTypeIcons = {
-                // Theft-related
                 'Theft': 'fa-user-secret',
-                'Robbery': 'fa-gun',
-                'Burglary': 'fa-house-crack',
-                'Pickpocket': 'fa-wallet',
-                'Shoplifting': 'fa-shop-slash',
-                
-                // Accident-related
-                'Accident': 'fa-car-burst',
-                'Car Accident': 'fa-car-crash',
-                'Traffic Accident': 'fa-traffic-light',
-                'Motorcycle Accident': 'fa-motorcycle',
-                
-                // Assault/Violence
-                'Assault/Harassment': 'fa-hand-fist',
-                'Assault': 'fa-hand-back-fist',
-                'Physical Violence': 'fa-user-injured',
-                'Harassment': 'fa-person-harassing',
-                
-                // Property Damage
-                'Property Damage/Incident': 'fa-house-damage',
-                'Vandalism': 'fa-spray-can',
-                'Arson': 'fa-fire-flame-curved',
-                
-                // Animal Incident
-                'Animal Incident': 'fa-shield-dog',
-                'Dog Attack': 'fa-dog',
-                'Stray Animals': 'fa-cats',
-                
-                // Verbal Abuse
-                'Verbal Abuse and Threats': 'fa-message-slash',
-                'Bullying': 'fa-user-large-slash',
-                'Threats': 'fa-skull-crossbones',
-                
-                // Public Disturbance
-                'Alarm and Scandal': 'fa-bell',
-                'Public Disturbance': 'fa-megaphone',
-                'Noise Complaint': 'fa-volume-xmark',
-                
-                // Lost Items
-                'Lost Items': 'fa-magnifying-glass',
-                'Lost ID': 'fa-id-card-clip',
-                'Lost Wallet': 'fa-wallet',
-                'Lost Keys': 'fa-key',
-                
-                // Scam/Fraud
-                'Scam/Fraud': 'fa-user-ninja',
-                'Online Scam': 'fa-credit-card',
-                'Identity Theft': 'fa-fingerprint',
-                
-                // Drugs
-                'Drugs Addiction': 'fa-syringe',
-                'Drugs': 'fa-pills',
-                
-                // Missing Person
-                'Missing Person': 'fa-person-circle-question',
-                'Kidnapping': 'fa-user-lock',
-                
-                // Debt
-                'Debt / Unpaid Wages Report': 'fa-money-bill-transfer',
-                'Unpaid Debt': 'fa-hand-holding-dollar',
-                
-                // Legal
-                'Defamation Complaint': 'fa-gavel',
                 'Reports/Agreement': 'fa-file-contract',
-                
-                // Others
+                'Accident': 'fa-car-burst',
+                'Debt / Unpaid Wages Report': 'fa-money-bill-transfer',
+                'Defamation Complaint': 'fa-gavel',
+                'Assault/Harassment': 'fa-hand-fist',
+                'Property Damage/Incident': 'fa-house-damage',
+                'Animal Incident': 'fa-shield-dog',
+                'Verbal Abuse and Threats': 'fa-message-slash',
+                'Alarm and Scandal': 'fa-bell',
+                'Lost Items': 'fa-magnifying-glass',
+                'Scam/Fraud': 'fa-user-ninja',
+                'Drugs Addiction': 'fa-syringe',
+                'Missing Person': 'fa-person-circle-question',
                 'Others': 'fa-circle-info'
             };
 
