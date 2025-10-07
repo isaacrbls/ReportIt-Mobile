@@ -162,11 +162,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       if (result.success && result.user) {
         // Only log success messages
         console.log('Login successful:', result.user.email);
-        Alert.alert(
-          'Success', 
-          'Login successful!', 
-          [{ text: 'OK', onPress: () => navigation.navigate('Map') }]
-        );
+        // Navigate directly to Map without showing success modal
+        navigation.navigate('Map');
       } else {
         setErrors(prev => ({ ...prev, general: result.error || 'Login failed' }));
         Alert.alert('Login Failed', result.error || 'Please check your credentials and try again.');

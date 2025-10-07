@@ -324,16 +324,8 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
       
       if (result.success && result.user) {
         console.log('Signup successful for user:', result.user.uid);
-        Alert.alert(
-          'Account Created!', 
-          'Your account has been successfully created with all your profile information saved to the database. You can now sign in!', 
-          [
-            { 
-              text: 'OK', 
-              onPress: () => navigation.navigate('Login')
-            }
-          ]
-        );
+        // Navigate directly to Login without showing success modal
+        navigation.navigate('Login');
       } else {
         console.error('Signup failed:', result.error);
         setErrors(prev => ({ ...prev, general: result.error || 'Account creation failed' }));
