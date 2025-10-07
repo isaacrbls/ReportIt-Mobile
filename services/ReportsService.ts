@@ -18,6 +18,7 @@ export interface Report {
   barangay: string;
   dateTime: string;
   description: string;
+  title?: string;
   geoLocation: {
     latitude: number;
     longitude: number;
@@ -82,9 +83,22 @@ export class ReportsService {
         
         // Extract all possible field variations
         const barangay = data.Barangay || data.barangay || '';
-        const dateTime = data.DateTime || data.dateTime || '';
+        // Handle Firestore Timestamp objects
+        let dateTime = '';
+        const rawDateTime = data.DateTime || data.dateTime;
+        if (rawDateTime) {
+          if (typeof rawDateTime === 'string') {
+            dateTime = rawDateTime;
+          } else if (rawDateTime.seconds) {
+            // Firestore Timestamp object
+            dateTime = new Date(rawDateTime.seconds * 1000).toISOString();
+          }
+        }
         const description = data.Description || data.description || '';
+        const title = data.Title || data.title || '';
         const incidentType = data.IncidentType || data.incidentType || '';
+        const category = data.Category || data.category || '';
+        const isSensitive = data.IsSensitive || data.isSensitive || false;
         const status = data.Status || data.status || 'Pending';
         const submittedByEmail = data.SubmittedByEmail || data.submittedByEmail || '';
         
@@ -93,11 +107,14 @@ export class ReportsService {
           barangay: barangay,
           dateTime: dateTime,
           description: description,
+          title: title,
           geoLocation: {
             latitude: geoLat,
             longitude: geoLng
           },
           incidentType: incidentType,
+          category: category,
+          isSensitive: isSensitive,
           latitude: geoLat,
           longitude: geoLng,
           mediaType: data.MediaType || data.mediaType || null,
@@ -110,9 +127,11 @@ export class ReportsService {
         console.log(`📍 Processing report ${doc.id}:`, {
           coordinates: `lat=${geoLat}, lng=${geoLng}`,
           barangay: barangay || 'NOT SET',
+          title: title || 'NOT SET',
           dateTime: dateTime || 'NOT SET',
           incidentType: incidentType || 'NOT SET',
           status: status || 'NOT SET',
+          isSensitive: isSensitive,
           description: description ? description.substring(0, 50) + '...' : 'NOT SET'
         });
         
@@ -372,12 +391,24 @@ export class ReportsService {
       }
 
       // Filter verified reports for the specific barangay (or all if no barangay specified)
-      const filteredReports = reportsResult.data.filter(r => 
-        r.status === "Verified" && 
-        r.geoLocation.latitude !== 0 && 
-        r.geoLocation.longitude !== 0 &&
-        (targetBarangay ? r.barangay === targetBarangay : true)
-      );
+      // Only include reports from the last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const filteredReports = reportsResult.data.filter(r => {
+        if (r.status !== "Verified") return false;
+        if (r.geoLocation.latitude === 0 || r.geoLocation.longitude === 0) return false;
+        if (targetBarangay && r.barangay !== targetBarangay) return false;
+        
+        // Check if report is within last 30 days
+        try {
+          const reportDate = new Date(r.dateTime);
+          return reportDate >= thirtyDaysAgo;
+        } catch (e) {
+          console.warn('⚠️ Invalid date format for report:', r.id);
+          return false;
+        }
+      });
 
       console.log(`📊 Found ${filteredReports.length} verified reports for hotspot analysis`);
 
@@ -475,8 +506,19 @@ export class ReportsService {
             
             // Extract all possible field variations
             const barangay = data.Barangay || data.barangay || '';
-            const dateTime = data.DateTime || data.dateTime || '';
+            // Handle Firestore Timestamp objects
+            let dateTime = '';
+            const rawDateTime = data.DateTime || data.dateTime;
+            if (rawDateTime) {
+              if (typeof rawDateTime === 'string') {
+                dateTime = rawDateTime;
+              } else if (rawDateTime.seconds) {
+                // Firestore Timestamp object
+                dateTime = new Date(rawDateTime.seconds * 1000).toISOString();
+              }
+            }
             const description = data.Description || data.description || '';
+            const title = data.Title || data.title || '';
             const incidentType = data.IncidentType || data.incidentType || '';
             const status = data.Status || data.status || 'Pending';
             const submittedByEmail = data.SubmittedByEmail || data.submittedByEmail || '';
@@ -486,6 +528,7 @@ export class ReportsService {
               barangay: barangay,
               dateTime: dateTime,
               description: description,
+              title: title,
               geoLocation: {
                 latitude: geoLat,
                 longitude: geoLng

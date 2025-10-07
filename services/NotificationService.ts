@@ -1,7 +1,11 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { Platform, Alert, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Check if running in Expo Go (push notifications not supported in Expo Go SDK 53+)
+const isExpoGo = Constants.appOwnership === 'expo';
 
 // Configure how notifications are handled when app is in foreground
 Notifications.setNotificationHandler({
@@ -54,6 +58,17 @@ export class NotificationService {
   static async requestPermissions(): Promise<NotificationPermissionResult> {
     try {
       console.log('🔔 Requesting notification permissions...');
+
+      // Check if running in Expo Go
+      if (isExpoGo) {
+        console.warn('⚠️ Push notifications are not supported in Expo Go (SDK 53+)');
+        console.log('ℹ️ For push notifications, build a development or production build');
+        return {
+          granted: false,
+          canAskAgain: false,
+          status: 'expo-go-limitation',
+        };
+      }
 
       // Check if this is a real device
       if (!Device.isDevice) {
@@ -124,6 +139,11 @@ export class NotificationService {
    */
   private static async registerForPushNotifications(): Promise<string | null> {
     try {
+      if (isExpoGo) {
+        console.warn('⚠️ Cannot register for push notifications in Expo Go');
+        return null;
+      }
+
       if (!Device.isDevice) {
         return null;
       }

@@ -323,44 +323,76 @@ const MapView = ({ userLocation, reports, hotspots }: { userLocation: LocationCo
                 L.marker([${report.geoLocation.latitude}, ${report.geoLocation.longitude}], {icon: createCategoryIcon('${report.category || ''}')})
                     .addTo(map)
                 .bindPopup(\`
-                    <div style="max-width: 280px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 4px;">
-                        <div style="font-weight: bold; color: #FF6B35; font-size: 14px; margin-bottom: 12px; border-bottom: 2px solid #FF6B35; padding-bottom: 6px;">
-                            <i class="fas fa-map-marker-alt" style="margin-right: 6px;"></i> ${report.incidentType || 'Incident Report'}
+                    <div style="max-width: 300px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 12px; background: white; border-radius: 8px;">
+                        <!-- Title Header -->
+                        <div style="font-weight: 700; color: #1F2937; font-size: 16px; margin-bottom: 14px; line-height: 1.3; border-bottom: 2px solid #E5E7EB; padding-bottom: 8px;">
+                            ${report.title || 'Untitled Report'}
                         </div>
                         
-                        <div style="margin-bottom: 8px; font-size: 12px; color: #333;">
-                            <strong><i class="fas fa-home" style="margin-right: 4px;"></i> Barangay:</strong> 
-                            <span style="color: #666;">${report.barangay || 'Not specified'}</span>
+                        <!-- Barangay -->
+                        <div style="margin-bottom: 8px; font-size: 13px; color: #4B5563; display: flex; align-items: center;">
+                            <i class="fas fa-home" style="margin-right: 8px; color: #6B7280; width: 14px;"></i>
+                            <strong style="color: #1F2937; margin-right: 6px;">Barangay:</strong> 
+                            <span>${report.barangay || 'Not specified'}</span>
                         </div>
                         
-                        <div style="margin-bottom: 8px; font-size: 12px; color: #333;">
-                            <strong><i class="fas fa-calendar-alt" style="margin-right: 4px;"></i> Date & Time:</strong> 
-                            <span style="color: #666;">${new Date('${report.dateTime}').toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                        <!-- Date & Time -->
+                        <div style="margin-bottom: 8px; font-size: 13px; color: #4B5563; display: flex; align-items: center;">
+                            <i class="fas fa-calendar-alt" style="margin-right: 8px; color: #6B7280; width: 14px;"></i>
+                            <strong style="color: #1F2937; margin-right: 6px;">Date & Time:</strong> 
+                            <span>${report.dateTime ? (() => {
+                                try {
+                                  const dateStr = typeof report.dateTime === 'string' 
+                                    ? report.dateTime.replace(' UTC', '').replace('T', ' ')
+                                    : report.dateTime;
+                                  const date = new Date(dateStr);
+                                  return date.toLocaleDateString('en-US', { 
+                                    month: 'long', 
+                                    day: 'numeric', 
+                                    year: 'numeric'
+                                  }) + ' at ' + date.toLocaleTimeString('en-US', { 
+                                    hour: 'numeric', 
+                                    minute: '2-digit',
+                                    hour12: true 
+                                  });
+                                } catch(e) {
+                                  return report.dateTime;
+                                }
+                              })() : 'Invalid Date'}</span>
                         </div>
                         
-                        <div style="margin-bottom: 8px; font-size: 12px; color: #333;">
-                            <strong><i class="fas fa-exclamation-triangle" style="margin-right: 4px;"></i> Incident Type:</strong> 
-                            <span style="color: #666;">${report.incidentType || 'Not specified'}</span>
+                        <!-- Incident Type -->
+                        <div style="margin-bottom: 8px; font-size: 13px; color: #4B5563; display: flex; align-items: center;">
+                            <i class="fas fa-exclamation-triangle" style="margin-right: 8px; color: #6B7280; width: 14px;"></i>
+                            <strong style="color: #1F2937; margin-right: 6px;">Incident Type:</strong> 
+                            <span>${report.incidentType || 'Not specified'}</span>
                         </div>
                         
-                        <div style="margin-bottom: 10px; font-size: 12px; color: #333;">
-                            <strong><i class="fas fa-check-circle" style="margin-right: 4px;"></i> Status:</strong> 
+                        <!-- Status -->
+                        <div style="margin-bottom: 10px; font-size: 13px; color: #4B5563; display: flex; align-items: center;">
+                            <i class="fas fa-check-circle" style="margin-right: 8px; color: #6B7280; width: 14px;"></i>
+                            <strong style="color: #1F2937; margin-right: 6px;">Status:</strong> 
                             <span style="
                                 color: white; 
                                 background-color: #22C55E;
-                                padding: 4px 10px; 
+                                padding: 3px 10px; 
                                 border-radius: 12px; 
                                 font-size: 11px;
                                 font-weight: 600;
                                 display: inline-block;
-                                margin-left: 4px;
                             ">Verified</span>
                         </div>
                         
-                        <div style="border-top: 1px solid #E5E7EB; padding-top: 8px; margin-top: 10px;">
-                            <div style="font-size: 12px; color: #333; margin-bottom: 4px;">
-                                <strong><i class="fas fa-edit" style="margin-right: 4px;"></i> Description:</strong> 
-                                <span style="color: #666; font-size: 11px; line-height: 1.5; display: block; max-height: 60px; overflow-y: auto;">${report.description || 'No description available'}</span>
+                        <!-- Description -->
+                        <div style="border-top: 1px solid #E5E7EB; padding-top: 10px; margin-top: 10px;">
+                            <div style="font-size: 13px; color: #4B5563;">
+                                <div style="display: flex; align-items: flex-start; margin-bottom: 6px;">
+                                    <i class="fas fa-file-alt" style="margin-right: 8px; color: #6B7280; width: 14px; margin-top: 2px;"></i>
+                                    <strong style="color: #1F2937;">Description:</strong>
+                                </div>
+                                <div style="color: #6B7280; font-size: 12px; line-height: 1.5; margin-top: 4px; max-height: 80px; overflow-y: auto; padding-left: 22px;">
+                                    ${report.description || 'No description available'}
+                                </div>
                             </div>
                         </div>
                         
@@ -566,10 +598,26 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     try {
       const result = await ReportsService.getAllReports();
       if (result.success && result.data) {
-        // Filter to only show Verified AND non-sensitive reports on the map
-        const verifiedReports = result.data.filter(report => 
-          report.status === 'Verified' && !report.isSensitive
-        );
+        // Filter to only show Verified AND non-sensitive reports within last 30 days
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const verifiedReports = result.data.filter(report => {
+          if (report.status !== 'Verified' || report.isSensitive) return false;
+          
+          // Check if report is within last 30 days
+          try {
+            if (!report.dateTime) return false;
+            
+            const reportDate = new Date(report.dateTime);
+            if (isNaN(reportDate.getTime())) return false;
+            
+            return reportDate >= thirtyDaysAgo;
+          } catch (e) {
+            console.warn('⚠️ Invalid date format for report:', report.id);
+            return false;
+          }
+        });
         setReports(verifiedReports);
         console.log(`✅ Successfully loaded ${verifiedReports.length} verified non-sensitive reports out of ${result.data.length} total reports`);
         
@@ -892,10 +940,65 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     
     const unsubscribeReports = ReportsService.subscribeToReports(
       (allReports) => {
-        // Filter to only show Verified AND non-sensitive reports on the map
-        const verifiedReports = allReports.filter(report => 
-          report.status === 'Verified' && !report.isSensitive
-        );
+        console.log(`📊 Received ${allReports.length} total reports from Firestore`);
+        
+        // Filter to only show Verified AND non-sensitive reports within last 30 days
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        console.log(`📅 30 days ago cutoff date: ${thirtyDaysAgo.toISOString()}`);
+        
+        const verifiedReports = allReports.filter(report => {
+          // Debug each report
+          const isVerified = report.status === 'Verified';
+          const isNotSensitive = !report.isSensitive;
+          
+          console.log(`🔍 Report ${report.id}:`, {
+            title: report.title || 'NO TITLE',
+            status: report.status,
+            isVerified,
+            isSensitive: report.isSensitive,
+            isNotSensitive,
+            dateTime: report.dateTime,
+            barangay: report.barangay
+          });
+          
+          if (!isVerified) {
+            console.log(`   ❌ Filtered out: Not verified (status: ${report.status})`);
+            return false;
+          }
+          if (!isNotSensitive) {
+            console.log(`   ❌ Filtered out: Is sensitive`);
+            return false;
+          }
+          
+          // Check if report is within last 30 days
+          try {
+            if (!report.dateTime) {
+              console.log(`   ❌ Filtered out: No dateTime field`);
+              return false;
+            }
+            
+            // Parse date - should already be ISO string from service
+            const reportDate = new Date(report.dateTime);
+            
+            if (isNaN(reportDate.getTime())) {
+              console.log(`   ❌ Filtered out: Invalid date: ${report.dateTime}`);
+              return false;
+            }
+            
+            const isWithin30Days = reportDate >= thirtyDaysAgo;
+            const daysDiff = Math.floor((new Date().getTime() - reportDate.getTime()) / (1000 * 60 * 60 * 24));
+            
+            console.log(`   📅 Date check: ${reportDate.toISOString()} (${daysDiff} days ago) - ${isWithin30Days ? '✅ PASS' : '❌ TOO OLD'}`);
+            
+            return isWithin30Days;
+          } catch (e) {
+            console.warn('   ⚠️ Error parsing date for report:', report.id, e);
+            return false;
+          }
+        });
+        
+        console.log(`✅ Filtered to ${verifiedReports.length} reports that meet all criteria`);
         
         // Update reports state
         setReports(verifiedReports);
