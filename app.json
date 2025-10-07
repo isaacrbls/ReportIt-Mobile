@@ -16,8 +16,10 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "ReportIt needs access to your location to show nearby incident reports and help you report incidents at your current location.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "ReportIt needs access to your location to show nearby incident reports and help you report incidents at your current location."
-      }
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "ReportIt needs access to your location to show nearby incident reports and help you report incidents at your current location.",
+        "NSUserNotificationsUsageDescription": "ReportIt needs permission to send you notifications about verified incident reports in your area to help keep you informed and safe."
+      },
+      "bundleIdentifier": "com.reportit.mobile"
     },
     "android": {
       "adaptiveIcon": {
@@ -29,14 +31,34 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "INTERNET"
-      ]
+        "INTERNET",
+        "POST_NOTIFICATIONS",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
+      ],
+      "package": "com.reportit.mobile",
+      "useNextNotificationsApi": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
-    ]
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#EF4444",
+          "sounds": ["./assets/notification-sound.wav"],
+          "mode": "production"
+        }
+      ]
+    ],
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#EF4444",
+      "androidMode": "default",
+      "androidCollapsedTitle": "ReportIt"
+    }
   }
 }

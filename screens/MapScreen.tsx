@@ -529,6 +529,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   const [isLocationPermissionModalVisible, setIsLocationPermissionModalVisible] = useState(false);
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
   const [isLogoutModalVisible, setIsLogoutModalVisible] = useState(false);
+  const [reportTitle, setReportTitle] = useState('');
   const [reportType, setReportType] = useState('');
   const [reportDescription, setReportDescription] = useState('');
   const [reportCategory, setReportCategory] = useState('Select type of incident');
@@ -544,6 +545,13 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   const [isLoadingHotspots, setIsLoadingHotspots] = useState(false);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   
+  // Real-time notification state
+  const [newVerifiedReports, setNewVerifiedReports] = useState<Report[]>([]);
+  const [showNotification, setShowNotification] = useState(false);
+  const [currentNotification, setCurrentNotification] = useState<Report | null>(null);
+  const [previousReportIds, setPreviousReportIds] = useState<Set<string>>(new Set());
+  const notificationAnimation = useRef(new Animated.Value(-100)).current;
+  
   // Media-related state
   const [selectedMedia, setSelectedMedia] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [isMediaPickerVisible, setIsMediaPickerVisible] = useState(false);
@@ -558,10 +566,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     try {
       const result = await ReportsService.getAllReports();
       if (result.success && result.data) {
-        // Filter to only show Verified reports on the map
-        const verifiedReports = result.data.filter(report => report.status === 'Verified');
+        // Filter to only show Verified AND non-sensitive reports on the map
+        const verifiedReports = result.data.filter(report => 
+          report.status === 'Verified' && !report.isSensitive
+        );
         setReports(verifiedReports);
-        console.log(`✅ Successfully loaded ${verifiedReports.length} verified reports out of ${result.data.length} total reports`);
+        console.log(`✅ Successfully loaded ${verifiedReports.length} verified non-sensitive reports out of ${result.data.length} total reports`);
         
         // Log sample report for debugging with all requested fields
         if (result.data.length > 0) {
@@ -613,6 +623,59 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     } finally {
       setIsLoadingHotspots(false);
     }
+  };
+
+  // Handle notification queue - show notifications one at a time
+  useEffect(() => {
+    if (newVerifiedReports.length > 0 && !showNotification) {
+      const nextReport = newVerifiedReports[0];
+      setCurrentNotification(nextReport);
+      setShowNotification(true);
+      
+      // Send push notification (works even when app is in background/closed)
+      sendPushNotification(nextReport);
+      
+      // Animate notification in
+      Animated.spring(notificationAnimation, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 8,
+      }).start();
+      
+      // Auto-hide notification after 5 seconds
+      const timer = setTimeout(() => {
+        hideNotification();
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [newVerifiedReports, showNotification]);
+
+  const sendPushNotification = async (report: Report) => {
+    try {
+      const { NotificationService } = await import('../services/NotificationService');
+      await NotificationService.notifyNewVerifiedReport(
+        report.incidentType || report.category || 'Incident',
+        report.barangay,
+        report.id
+      );
+    } catch (error) {
+      console.error('Error sending push notification:', error);
+    }
+  };
+
+  const hideNotification = () => {
+    Animated.timing(notificationAnimation, {
+      toValue: -100,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowNotification(false);
+      setCurrentNotification(null);
+      // Remove the shown notification from queue
+      setNewVerifiedReports(prev => prev.slice(1));
+    });
   };
 
   // Function to check authentication status and load user profile
@@ -751,6 +814,50 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     return () => unsubscribe();
   }, [fontsLoaded]);
 
+  // Set up push notification listeners
+  useEffect(() => {
+    if (!fontsLoaded) return;
+
+    let notificationListener: any;
+    let responseListener: any;
+
+    const setupNotificationListeners = async () => {
+      try {
+        const { NotificationService } = await import('../services/NotificationService');
+        
+        // Listen for notifications received while app is in foreground
+        notificationListener = NotificationService.addNotificationReceivedListener((notification) => {
+          console.log('🔔 Notification received:', notification);
+        });
+
+        // Listen for user tapping on notifications
+        responseListener = NotificationService.addNotificationResponseListener((response) => {
+          console.log('🔔 Notification tapped:', response);
+          const data = response.notification.request.content.data;
+          
+          if (data.type === 'verified-report' && data.reportId) {
+            console.log('📍 User tapped on report notification:', data.reportId);
+            // Could navigate to report details or highlight on map
+            Alert.alert(
+              'View Report',
+              `Report ID: ${data.reportId}\nType: ${data.incidentType}\nLocation: ${data.barangay}`,
+              [{ text: 'OK' }]
+            );
+          }
+        });
+      } catch (error) {
+        console.error('Error setting up notification listeners:', error);
+      }
+    };
+
+    setupNotificationListeners();
+
+    return () => {
+      notificationListener?.remove();
+      responseListener?.remove();
+    };
+  }, [fontsLoaded]);
+
   // Request location permission and get current location on component mount
   useEffect(() => {
     if (!fontsLoaded) return;
@@ -778,8 +885,59 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     };
 
     initializeLocation();
-    fetchReports(); // Load reports when component mounts
+    
+    // Set up real-time listener for reports
+    console.log('🔄 Setting up real-time reports listener...');
+    let isFirstLoad = true; // Track first load to avoid showing notifications on initial mount
+    
+    const unsubscribeReports = ReportsService.subscribeToReports(
+      (allReports) => {
+        // Filter to only show Verified AND non-sensitive reports on the map
+        const verifiedReports = allReports.filter(report => 
+          report.status === 'Verified' && !report.isSensitive
+        );
+        
+        // Update reports state
+        setReports(verifiedReports);
+        
+        // On first load, just store the IDs without showing notifications
+        if (isFirstLoad) {
+          const currentVerifiedIds = new Set(verifiedReports.map(r => r.id));
+          setPreviousReportIds(currentVerifiedIds);
+          isFirstLoad = false;
+          console.log(`✅ Initial load: ${verifiedReports.length} verified reports`);
+        } else {
+          // Detect newly verified reports for notifications (after first load)
+          setPreviousReportIds(prevIds => {
+            const currentVerifiedIds = new Set(verifiedReports.map(r => r.id));
+            const newlyVerified = verifiedReports.filter(report => 
+              !prevIds.has(report.id)
+            );
+            
+            // Show notifications for newly verified reports
+            if (newlyVerified.length > 0) {
+              console.log(`🔔 ${newlyVerified.length} new verified report(s) detected!`);
+              setNewVerifiedReports(prev => [...prev, ...newlyVerified]);
+            }
+            
+            console.log(`✅ Real-time update: ${verifiedReports.length} verified reports (${allReports.length} total)`);
+            return currentVerifiedIds;
+          });
+        }
+      },
+      (error) => {
+        console.error('❌ Real-time reports error:', error);
+        Alert.alert('Error', `Failed to load reports: ${error}`);
+      }
+    );
+    
     fetchHotspots(); // Load hotspots when component mounts
+    
+    // Cleanup listener on unmount
+    return () => {
+      console.log('🔄 Cleaning up real-time reports listener...');
+      unsubscribeReports();
+    };
   }, [fontsLoaded]);
 
   const handleReportPress = async () => {
@@ -887,13 +1045,13 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       return;
     }
 
-    if (reportCategory === 'Select type of incident') {
-      Alert.alert('Error', 'Please select a category for the incident');
+    if (!reportTitle.trim()) {
+      Alert.alert('Error', 'Please enter a title for the incident');
       return;
     }
 
-    if (!reportType.trim()) {
-      Alert.alert('Error', 'Please enter the type of incident');
+    if (reportCategory === 'Select type of incident') {
+      Alert.alert('Error', 'Please select a category for the incident');
       return;
     }
 
@@ -927,8 +1085,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       // Prepare report data with current location
       const reportData: CreateReportData = {
         barangay: userBarangay,
+        title: reportTitle.trim(),
         description: reportDescription.trim(),
-        incidentType: reportType.trim(),
+        incidentType: reportCategory !== 'Select type of incident' ? reportCategory : 'Others',
         category: reportCategory !== 'Select type of incident' ? reportCategory : 'Others',
         isSensitive: isSensitive,
         latitude: currentLocation.latitude,
@@ -972,6 +1131,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         
         // Close modal and clear form
         setIsReportModalVisible(false);
+        setReportTitle('');
         setReportType('');
         setReportDescription('');
         setReportCategory('Select type of incident');
@@ -986,8 +1146,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             {
               text: 'OK',
               onPress: () => {
-                // Refresh reports to show the new one
-                fetchReports();
+                // Real-time listener will automatically update reports
+                // Just refresh hotspots
                 fetchHotspots();
               }
             }
@@ -1154,18 +1314,76 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
 
   const handleCloseReportModal = () => {
     // Clear all form data including media when modal is closed
+    setReportTitle('');
     setReportType('');
     setReportDescription('');
+    setReportCategory('Select type of incident');
+    setIsSensitive(false);
     setSelectedMedia([]);
     setIsReportModalVisible(false);
   };
 
-  const handleNotificationPress = () => {
-    setIsNotificationModalVisible(true);
+  const handleNotificationPress = async () => {
+    try {
+      const { NotificationService } = await import('../services/NotificationService');
+      
+      // Check current permission status
+      const currentStatus = await NotificationService.getPermissionStatus();
+      
+      if (currentStatus === 'granted') {
+        Alert.alert(
+          'Notifications Enabled',
+          'You are already receiving push notifications for verified reports.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
+      if (currentStatus === 'denied') {
+        // Permission was previously denied, show settings prompt
+        NotificationService.showPermissionDeniedAlert();
+        return;
+      }
+      
+      // Show custom modal asking user if they want to enable notifications
+      setIsNotificationModalVisible(true);
+    } catch (error) {
+      console.error('Error handling notification press:', error);
+      Alert.alert('Error', 'Unable to manage notification settings.');
+    }
   };
 
-  const handleAllowNotifications = () => {
-    setIsNotificationModalVisible(false);
+  const handleAllowNotifications = async () => {
+    try {
+      const { NotificationService } = await import('../services/NotificationService');
+      
+      setIsNotificationModalVisible(false);
+      
+      // Request notification permissions
+      const result = await NotificationService.requestPermissions();
+      
+      if (result.granted) {
+        Alert.alert(
+          '✅ Notifications Enabled',
+          'You will now receive push notifications when new incident reports are verified in your area.',
+          [{ text: 'OK' }]
+        );
+      } else if (!result.canAskAgain) {
+        // User denied permission, show settings prompt
+        setTimeout(() => {
+          NotificationService.showPermissionDeniedAlert();
+        }, 500);
+      } else {
+        Alert.alert(
+          'Notifications Not Enabled',
+          'You can enable notifications later from the menu.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error requesting notifications:', error);
+      Alert.alert('Error', 'Unable to enable notifications. Please try again.');
+    }
   };
 
   const handleEditProfilePress = () => {
@@ -1242,6 +1460,40 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
 
       </View>
 
+      {/* Real-time Notification Banner */}
+      {showNotification && currentNotification && (
+        <Animated.View 
+          style={[
+            styles.notificationBanner,
+            {
+              transform: [{ translateY: notificationAnimation }]
+            }
+          ]}
+        >
+          <TouchableOpacity 
+            style={styles.notificationContent}
+            onPress={hideNotification}
+            activeOpacity={0.9}
+          >
+            <View style={styles.notificationIcon}>
+              <FontAwesome name="check-circle" size={24} color="#10B981" />
+            </View>
+            <View style={styles.notificationTextContainer}>
+              <Text style={styles.notificationTitle}>New Report Verified!</Text>
+              <Text style={styles.notificationText} numberOfLines={2}>
+                {currentNotification.incidentType} in {currentNotification.barangay}
+              </Text>
+            </View>
+            <TouchableOpacity 
+              onPress={hideNotification}
+              style={styles.notificationClose}
+            >
+              <FontAwesome name="times" size={18} color="#6B7280" />
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
           <FontAwesome name="search" size={13} color="#6B7280" />
@@ -1261,17 +1513,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
 
       <View style={styles.fabContainer}>
         <TouchableOpacity 
-          style={[styles.fab, (isLoadingReports || isLoadingHotspots) && styles.fabDisabled]} 
+          style={[styles.fab, isLoadingHotspots && styles.fabDisabled]} 
           onPress={() => {
-            fetchReports();
+            // Real-time reports updates are automatic, only refresh hotspots manually
             fetchHotspots();
           }}
-          disabled={isLoadingReports || isLoadingHotspots}
+          disabled={isLoadingHotspots}
         >
           <FontAwesome 
-            name={(isLoadingReports || isLoadingHotspots) ? "spinner" : "refresh"} 
+            name={isLoadingHotspots ? "spinner" : "refresh"} 
             size={18} 
-            color={(isLoadingReports || isLoadingHotspots) ? "#9CA3AF" : "#6B7280"} 
+            color={isLoadingHotspots ? "#9CA3AF" : "#6B7280"} 
           />
         </TouchableOpacity>
         <TouchableOpacity style={styles.fab} onPress={handleLocationPress}>
@@ -1623,8 +1875,19 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
               </View>
               
               <View style={styles.reportForm}>
+              {/* Title of Incident */}
+              <Text style={styles.reportLabel}>Title of incident</Text>
+              <TextInput
+                style={styles.reportInput}
+                value={reportTitle}
+                onChangeText={setReportTitle}
+                placeholder="Enter incident title (e.g., 'Motorcycle Theft on Main St.')"
+                placeholderTextColor="#9CA3AF"
+                maxLength={100}
+              />
+
               {/* Category Dropdown */}
-              <Text style={styles.reportLabel}>Category</Text>
+              <Text style={styles.reportLabel}>Type of incident</Text>
               <TouchableOpacity 
                 style={styles.categoryDropdownButton}
                 onPress={() => setIsCategoryDropdownVisible(!isCategoryDropdownVisible)}
@@ -1675,15 +1938,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
                   ))}
                 </ScrollView>
               )}
-
-              <Text style={styles.reportLabel}>Type of incident</Text>
-              <TextInput
-                style={styles.reportInput}
-                value={reportType}
-                onChangeText={setReportType}
-                placeholder="Enter incident type"
-                placeholderTextColor="#9CA3AF"
-              />
 
               <Text style={styles.reportLabel}>Description</Text>
               <TextInput
@@ -2428,6 +2682,56 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#111827',
     fontWeight: '500',
+  },
+  // Notification Banner Styles
+  notificationBanner: {
+    position: 'absolute',
+    top: responsiveSize(70, 85, 100),
+    left: responsivePadding(16),
+    right: responsivePadding(16),
+    zIndex: 9999,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  notificationContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  notificationIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationTextContainer: {
+    flex: 1,
+  },
+  notificationTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    fontFamily: 'Poppins_700Bold',
+    marginBottom: 2,
+  },
+  notificationText: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontFamily: 'Poppins_400Regular',
+  },
+  notificationClose: {
+    padding: 4,
   },
 });
 

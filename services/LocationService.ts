@@ -32,8 +32,19 @@ class LocationService {
   async requestLocationPermission(): Promise<LocationPermissionResponse> {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
+      const granted = status === Location.PermissionStatus.GRANTED;
+      
+      // If permission granted, check if location services are enabled
+      if (granted) {
+        const servicesEnabled = await this.isLocationEnabled();
+        if (!servicesEnabled) {
+          console.warn('⚠️ Permission granted but location services disabled');
+          await this.promptEnableLocationServices();
+        }
+      }
+      
       return {
-        granted: status === Location.PermissionStatus.GRANTED,
+        granted: granted,
         status: status,
       };
     } catch (error) {

@@ -8,7 +8,8 @@ import {
   where,
   orderBy,
   GeoPoint,
-  Timestamp
+  Timestamp,
+  onSnapshot
 } from 'firebase/firestore';
 import { firestore } from '../config/firebase';
 
@@ -35,6 +36,7 @@ export interface Report {
 
 export interface CreateReportData {
   barangay: string;
+  title: string;
   description: string;
   incidentType: string;
   category?: string;
@@ -244,6 +246,7 @@ export class ReportsService {
       
       const newReport = {
         Barangay: reportData.barangay,
+        Title: reportData.title,
         Description: reportData.description,
         IncidentType: reportData.incidentType,
         Category: reportData.category || 'Others',
@@ -443,5 +446,88 @@ export class ReportsService {
    */
   static async calculateBarangayHotspots(targetBarangay: string): Promise<{ success: boolean; data?: Hotspot[]; error?: string }> {
     return this.calculateHotspots(targetBarangay);
+  }
+
+  /**
+   * Subscribe to real-time reports updates
+   * Returns an unsubscribe function to stop listening
+   */
+  static subscribeToReports(
+    onUpdate: (reports: Report[]) => void,
+    onError?: (error: string) => void
+  ): () => void {
+    try {
+      console.log('🔄 Setting up real-time reports listener...');
+      const reportsCollection = collection(firestore, 'reports');
+      
+      const unsubscribe = onSnapshot(
+        reportsCollection,
+        (snapshot) => {
+          console.log(`📊 Real-time update: ${snapshot.size} documents in reports collection`);
+          const reports: Report[] = [];
+          
+          snapshot.forEach((doc) => {
+            const data = doc.data();
+            
+            // Convert Firestore data to our Report interface
+            const geoLat = data.GeoLocation?._lat || data.geoLocation?.latitude || data.Latitude || data.latitude || 0;
+            const geoLng = data.GeoLocation?._long || data.geoLocation?.longitude || data.Longitude || data.longitude || 0;
+            
+            // Extract all possible field variations
+            const barangay = data.Barangay || data.barangay || '';
+            const dateTime = data.DateTime || data.dateTime || '';
+            const description = data.Description || data.description || '';
+            const incidentType = data.IncidentType || data.incidentType || '';
+            const status = data.Status || data.status || 'Pending';
+            const submittedByEmail = data.SubmittedByEmail || data.submittedByEmail || '';
+            
+            const report: Report = {
+              id: doc.id,
+              barangay: barangay,
+              dateTime: dateTime,
+              description: description,
+              geoLocation: {
+                latitude: geoLat,
+                longitude: geoLng
+              },
+              incidentType: incidentType,
+              category: data.Category || data.category,
+              isSensitive: data.IsSensitive || data.isSensitive || false,
+              latitude: geoLat,
+              longitude: geoLng,
+              mediaType: data.MediaType || data.mediaType || null,
+              mediaURL: data.MediaURL || data.mediaURL || null,
+              status: status,
+              submittedByEmail: submittedByEmail,
+              hasMedia: data.hasMedia || (data.MediaURL || data.mediaURL) ? true : false
+            };
+            
+            // Only include reports that have valid coordinates
+            if (report.geoLocation.latitude !== 0 && report.geoLocation.longitude !== 0) {
+              reports.push(report);
+            }
+          });
+          
+          console.log(`✅ Real-time update processed: ${reports.length} reports with valid coordinates`);
+          onUpdate(reports);
+        },
+        (error) => {
+          console.error('❌ Real-time listener error:', error);
+          if (onError) {
+            onError(error.message || 'Failed to listen to reports updates');
+          }
+        }
+      );
+      
+      console.log('✅ Real-time reports listener set up successfully');
+      return unsubscribe;
+    } catch (error: any) {
+      console.error('❌ Error setting up real-time listener:', error);
+      if (onError) {
+        onError(error.message || 'Failed to set up real-time listener');
+      }
+      // Return a no-op function if setup fails
+      return () => {};
+    }
   }
 }
