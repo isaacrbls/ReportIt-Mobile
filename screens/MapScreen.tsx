@@ -185,7 +185,7 @@ const MapView = React.forwardRef<any, { userLocation: LocationCoords | null; rep
                 'Assault/Harassment': 'fa-hand-fist',
                 'Property Damage/Incident': 'fa-house-damage',
                 'Animal Incident': 'fa-shield-dog',
-                'Verbal Abuse and Threats': 'fa-message-slash',
+                'Verbal Abuse and Threats': 'fa-comment-slash',
                 'Alarm and Scandal': 'fa-bell',
                 'Lost Items': 'fa-magnifying-glass',
                 'Scam/Fraud': 'fa-user-ninja',

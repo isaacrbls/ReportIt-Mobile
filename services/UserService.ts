@@ -1,6 +1,6 @@
 import { ref, set, get, update, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { database, storage } from '../config/firebase';
+import { database, storage, auth } from '../config/firebase';
 import { User } from 'firebase/auth';
 
 export interface UserProfile {
@@ -377,7 +377,6 @@ export class UserService {
   static async getCurrentUserProfile(): Promise<UserServiceResult> {
     try {
       // Get current user from Firebase Auth
-      const { auth } = await import('../config/firebase');
       const currentUser = auth.currentUser;
       
       if (!currentUser) {
@@ -440,26 +439,20 @@ export class UserService {
    */
   static async updateCurrentUserProfile(updates: Partial<UserProfile>): Promise<UserServiceResult> {
     try {
-      const { auth } = await import('../config/firebase');
       const currentUser = auth.currentUser;
-      
       if (!currentUser) {
         return {
           success: false,
           error: 'No user is currently signed in'
         };
       }
-
       console.log('Updating profile for user:', currentUser.uid);
-      
       const userRef = ref(database, `users/${currentUser.uid}`);
       const updateData = {
         ...updates,
         updatedAt: new Date().toISOString()
       };
-      
       await update(userRef, updateData);
-      
       console.log('Profile updated successfully');
       return {
         success: true,
@@ -479,42 +472,32 @@ export class UserService {
    */
   static async uploadProfilePicture(imageUri: string): Promise<UserServiceResult> {
     try {
-      const { auth, storage } = await import('../config/firebase');
       const currentUser = auth.currentUser;
-      
       if (!currentUser) {
         return {
           success: false,
           error: 'No user is currently signed in'
         };
       }
-
       console.log('Uploading profile picture for user:', currentUser.uid);
-
       // Generate unique filename
       const timestamp = Date.now();
       const filename = `profile_${currentUser.uid}_${timestamp}.jpg`;
       const profilePicturePath = `profile_pictures/${currentUser.uid}/${filename}`;
-      
       // Convert image URI to blob
       const response = await fetch(imageUri);
       const blob = await response.blob();
-      
       // Upload to Firebase Storage
-      const { ref: storageRef, uploadBytes, getDownloadURL } = await import('firebase/storage');
       const imageRef = storageRef(storage, profilePicturePath);
       const uploadResult = await uploadBytes(imageRef, blob);
-      
       // Get download URL
       const downloadURL = await getDownloadURL(imageRef);
-      
       // Update user profile with new image URLs
       const profileUpdate = {
         profilePictureURL: downloadURL,
         profilePicturePath: profilePicturePath,
         updatedAt: new Date().toISOString()
       };
-      
       const updateResult = await this.updateCurrentUserProfile(profileUpdate);
       
       if (updateResult.success) {
@@ -543,18 +526,14 @@ export class UserService {
    */
   static async deleteProfilePicture(): Promise<UserServiceResult> {
     try {
-      const { auth, storage } = await import('../config/firebase');
       const currentUser = auth.currentUser;
-      
       if (!currentUser) {
         return {
           success: false,
           error: 'No user is currently signed in'
         };
       }
-
       console.log('Deleting profile picture for user:', currentUser.uid);
-      
       // Get current user profile to find the image path
       const profileResult = await this.getCurrentUserProfile();
       if (!profileResult.success || !profileResult.data) {
@@ -563,13 +542,10 @@ export class UserService {
           error: 'Could not retrieve current user profile'
         };
       }
-
       const userProfile = profileResult.data as UserProfile;
-      
       // If user has a profile picture, delete it from storage
       if (userProfile.profilePicturePath) {
         try {
-          const { ref: storageRef, deleteObject } = await import('firebase/storage');
           const imageRef = storageRef(storage, userProfile.profilePicturePath);
           await deleteObject(imageRef);
           console.log('Profile picture deleted from storage');
@@ -578,16 +554,13 @@ export class UserService {
           // Continue with profile update even if storage deletion fails
         }
       }
-      
       // Remove profile picture URLs from user profile
       const profileUpdate = {
         profilePictureURL: undefined,
         profilePicturePath: undefined,
         updatedAt: new Date().toISOString()
       };
-      
       const updateResult = await this.updateCurrentUserProfile(profileUpdate);
-      
       if (updateResult.success) {
         console.log('Profile picture removed successfully');
         return {
@@ -612,13 +585,10 @@ export class UserService {
   static async updateProfilePicture(imageUri: string): Promise<UserServiceResult> {
     try {
       console.log('Updating profile picture...');
-      
       // First delete the old profile picture if it exists
       await this.deleteProfilePicture();
-      
       // Then upload the new profile picture
       const uploadResult = await this.uploadProfilePicture(imageUri);
-      
       if (uploadResult.success) {
         console.log('Profile picture updated successfully');
         return uploadResult;
