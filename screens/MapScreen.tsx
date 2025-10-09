@@ -1825,6 +1825,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
                     <Text style={styles.menuItemText}>Incident Analysis</Text>
                   </TouchableOpacity>
 
+                  {/* View Reports - Only for logged in users */}
+                  <TouchableOpacity 
+                    style={styles.menuItem}
+                    onPress={() => {
+                      Animated.timing(slideAnim, {
+                        toValue: -280,
+                        duration: 300,
+                        useNativeDriver: true,
+                      }).start(() => {
+                        setIsSidebarVisible(false);
+                        navigation.navigate('ViewReports');
+                      });
+                    }}
+                  >
+                    <Text style={styles.menuItemText}>View Reports</Text>
+                  </TouchableOpacity>
+
                   {/* Log Out - Only for logged in users */}
                   <TouchableOpacity 
                     style={styles.menuItem}
@@ -1978,12 +1995,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
               Are you sure you want to log out?
             </Text>
             <View style={styles.permissionButtons}>
-              <TouchableOpacity 
-                style={styles.notNowButton}
-                onPress={() => setIsLogoutModalVisible(false)}
-              >
-                <Text style={styles.notNowText}>Yes</Text>
-              </TouchableOpacity>
+              {/* Yes (Confirm Logout) */}
               <TouchableOpacity 
                 style={styles.allowButton}
                 onPress={() => {
@@ -1996,7 +2008,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
                   navigation.navigate('Login');
                 }}
               >
-                <Text style={styles.allowText}>No</Text>
+                <Text style={styles.allowText}>Yes</Text>
+              </TouchableOpacity>
+              {/* No (Cancel) */}
+              <TouchableOpacity 
+                style={styles.notNowButton}
+                onPress={() => setIsLogoutModalVisible(false)}
+              >
+                <Text style={styles.notNowText}>No</Text>
               </TouchableOpacity>
             </View>
           </View>

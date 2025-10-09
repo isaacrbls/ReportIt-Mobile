@@ -8,6 +8,8 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import {
@@ -63,7 +65,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ navigation 
     return null;
   }
 
-  const handleSendVerificationCode = async () => {
+  const handleSendResetLink = async () => {
     if (!email || email.indexOf('@') === -1) {
       Alert.alert('Invalid Email', 'Please enter a valid email address.');
       return;
@@ -75,29 +77,21 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ navigation 
       const result = await AuthService.requestPasswordReset(email);
       
       if (result.success) {
-        // Show success message with different info based on source
-        let message = result.message || 'Password reset email sent successfully.';
-        let title = 'Email Sent';
-        
-        if (result.source === 'firebase') {
-          message += '\n\nCheck your email inbox and spam folder for the reset link.';
-        } else if (result.source === 'django') {
-          message += '\n\nProcessed by Django backend.';
-        } else if (result.source === 'nodejs') {
-          message += '\n\nProcessed by Node.js backend.';
-        }
-
-        Alert.alert(title, message, [
-          {
-            text: 'Back to Login',
-            onPress: () => {
-              // Navigate back to login since password reset is handled via email
-              navigation.navigate('Login');
+        Alert.alert(
+          'Reset Link Sent!', 
+          'A password reset link has been sent to your email. Please check your inbox and spam folder.\n\nClick the link in the email to reset your password.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Navigate back to login after successful reset email
+                navigation.navigate('Login');
+              }
             }
-          }
-        ]);
+          ]
+        );
       } else {
-        Alert.alert('Error', result.error || 'Failed to send password reset email.');
+        Alert.alert('Error', result.error || 'Failed to send password reset email. Please try again.');
       }
     } catch (error: any) {
       console.error('❌ Password reset request failed:', error);
@@ -126,7 +120,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ navigation 
           <ShieldIcon size={48} color="#EF4444" />
           <Text style={styles.title}>Forgot Password</Text>
           <Text style={styles.subtitle}>
-            Enter your email to receive a verification code
+            Enter your email to receive a password reset link
           </Text>
         </View>
 
@@ -137,7 +131,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ navigation 
               style={styles.input}
               value={email}
               onChangeText={setEmail}
-              placeholder="keilanagiril@gmail.com"
+              placeholder="Enter your email"
               placeholderTextColor="#9CA3AF"
               keyboardType="email-address"
               autoCapitalize="none"
@@ -146,7 +140,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ navigation 
 
           <TouchableOpacity
             style={[styles.sendButton, isButtonDisabled && styles.sendButtonDisabled]}
-            onPress={handleSendVerificationCode}
+            onPress={handleSendResetLink}
             disabled={isButtonDisabled}
           >
             {loading ? (
@@ -155,7 +149,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ navigation 
                 <Text style={styles.sendButtonText}>Sending...</Text>
               </View>
             ) : (
-              <Text style={styles.sendButtonText}>Send Verification Code</Text>
+              <Text style={styles.sendButtonText}>Send Reset Link</Text>
             )}
           </TouchableOpacity>
 
@@ -178,7 +172,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#EF4444',
-    paddingTop: 20,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 16 : 60,
     paddingBottom: 16,
     paddingHorizontal: 20,
   },

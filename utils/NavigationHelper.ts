@@ -32,18 +32,6 @@ export class NavigationHelper {
       logicalBack: 'Signup' // Always return to signup with context
     },
     'ForgotPassword': {
-      allowedNext: ['VerifyEmail', 'Login'],
-      logicalBack: 'Login'
-    },
-    'VerifyEmail': {
-      allowedNext: ['CreateNewPassword', 'ForgotPassword'],
-      logicalBack: 'ForgotPassword'
-    },
-    'CreateNewPassword': {
-      allowedNext: ['PasswordResetComplete'],
-      logicalBack: 'VerifyEmail'
-    },
-    'PasswordResetComplete': {
       allowedNext: ['Login'],
       logicalBack: 'Login'
     },
@@ -53,6 +41,10 @@ export class NavigationHelper {
       logicalBack: 'EXIT_APP' // Map is home base
     },
     'IncidentAnalysis': {
+      allowedNext: ['Map'],
+      logicalBack: 'Map'
+    },
+    'ViewReports': {
       allowedNext: ['Map'],
       logicalBack: 'Map'
     },

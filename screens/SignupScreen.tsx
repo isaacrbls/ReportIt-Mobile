@@ -12,6 +12,8 @@ import {
   Modal,
   FlatList,
   BackHandler,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import {
@@ -675,9 +677,9 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#EF4444',
-    paddingTop: 20,
-    paddingBottom: 20,
-    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 16 : 60,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
   },
   backButton: {
     flexDirection: 'row',
@@ -686,7 +688,7 @@ const styles = StyleSheet.create({
   backText: {
     color: 'white',
     fontSize: 16,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Poppins_500Medium',
     marginLeft: 8,
   },
   content: {

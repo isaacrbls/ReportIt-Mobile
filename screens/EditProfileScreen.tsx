@@ -16,6 +16,10 @@ import {
 import { NavigationProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import * as ImagePicker from 'expo-image-picker';
+import {
+  useFonts,
+  Poppins_500Medium,
+} from '@expo-google-fonts/poppins';
 import { AuthService } from '../services/AuthService';
 import { UserService, UserProfile } from '../services/UserService';
 
@@ -532,8 +536,9 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#EF4444',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 16 : 60,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
   },
   backButton: {
     flexDirection: 'row',
@@ -542,8 +547,8 @@ const styles = StyleSheet.create({
   backText: {
     color: 'white',
     fontSize: 16,
+    fontFamily: 'Poppins_500Medium',
     marginLeft: 8,
-    fontWeight: '500',
   },
   content: {
     flex: 1,

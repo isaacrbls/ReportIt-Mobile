@@ -7,6 +7,8 @@ import {
   ScrollView,
   SafeAreaView,
   BackHandler,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import {
@@ -207,7 +209,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#EF4444',
-    paddingTop: 20,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 16 : 60,
     paddingBottom: 16,
     paddingHorizontal: 20,
   },

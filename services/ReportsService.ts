@@ -9,7 +9,8 @@ import {
   orderBy,
   GeoPoint,
   Timestamp,
-  onSnapshot
+  onSnapshot,
+  deleteDoc,
 } from 'firebase/firestore';
 import { firestore } from '../config/firebase';
 
@@ -61,6 +62,47 @@ export interface Hotspot {
 }
 
 export class ReportsService {
+  /**
+   * Map Firestore document data to Report interface, handling legacy PascalCase/camelCase fields
+   */
+  private static mapToReport(id: string, data: any): Report {
+    const geoLat = data.GeoLocation?._lat || data.geoLocation?.latitude || data.Latitude || data.latitude || 0;
+    const geoLng = data.GeoLocation?._long || data.geoLocation?.longitude || data.Longitude || data.longitude || 0;
+
+    // Handle Firestore Timestamp objects and strings
+    let dateTime = '';
+    const rawDateTime = data.DateTime || data.dateTime;
+    if (rawDateTime) {
+      if (typeof rawDateTime === 'string') {
+        dateTime = rawDateTime;
+      } else if (rawDateTime.seconds) {
+        dateTime = new Date(rawDateTime.seconds * 1000).toISOString();
+      }
+    }
+
+    const report: Report = {
+      id,
+      barangay: data.Barangay || data.barangay || '',
+      dateTime,
+      description: data.Description || data.description || '',
+      title: data.Title || data.title || '',
+      geoLocation: {
+        latitude: geoLat,
+        longitude: geoLng,
+      },
+      incidentType: data.IncidentType || data.incidentType || '',
+      category: data.Category || data.category || '',
+      isSensitive: data.IsSensitive || data.isSensitive || false,
+      latitude: geoLat,
+      longitude: geoLng,
+      mediaType: data.MediaType || data.mediaType || null,
+      mediaURL: data.MediaURL || data.mediaURL || null,
+      status: data.Status || data.status || 'Pending',
+      submittedByEmail: data.SubmittedByEmail || data.submittedByEmail || '',
+      hasMedia: data.hasMedia || (data.MediaURL || data.mediaURL) ? true : false,
+    };
+    return report;
+  }
   
   /**
    * Fetch all reports with geolocation data from Firestore
@@ -76,63 +118,17 @@ export class ReportsService {
       
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        
-        // Convert Firestore data to our Report interface
-        const geoLat = data.GeoLocation?._lat || data.geoLocation?.latitude || data.Latitude || data.latitude || 0;
-        const geoLng = data.GeoLocation?._long || data.geoLocation?.longitude || data.Longitude || data.longitude || 0;
-        
-        // Extract all possible field variations
-        const barangay = data.Barangay || data.barangay || '';
-        // Handle Firestore Timestamp objects
-        let dateTime = '';
-        const rawDateTime = data.DateTime || data.dateTime;
-        if (rawDateTime) {
-          if (typeof rawDateTime === 'string') {
-            dateTime = rawDateTime;
-          } else if (rawDateTime.seconds) {
-            // Firestore Timestamp object
-            dateTime = new Date(rawDateTime.seconds * 1000).toISOString();
-          }
-        }
-        const description = data.Description || data.description || '';
-        const title = data.Title || data.title || '';
-        const incidentType = data.IncidentType || data.incidentType || '';
-        const category = data.Category || data.category || '';
-        const isSensitive = data.IsSensitive || data.isSensitive || false;
-        const status = data.Status || data.status || 'Pending';
-        const submittedByEmail = data.SubmittedByEmail || data.submittedByEmail || '';
-        
-        const report: Report = {
-          id: doc.id,
-          barangay: barangay,
-          dateTime: dateTime,
-          description: description,
-          title: title,
-          geoLocation: {
-            latitude: geoLat,
-            longitude: geoLng
-          },
-          incidentType: incidentType,
-          category: category,
-          isSensitive: isSensitive,
-          latitude: geoLat,
-          longitude: geoLng,
-          mediaType: data.MediaType || data.mediaType || null,
-          mediaURL: data.MediaURL || data.mediaURL || null,
-          status: status,
-          submittedByEmail: submittedByEmail,
-          hasMedia: data.hasMedia || (data.MediaURL || data.mediaURL) ? true : false
-        };
+        const report = this.mapToReport(doc.id, data);
         
         console.log(`📍 Processing report ${doc.id}:`, {
-          coordinates: `lat=${geoLat}, lng=${geoLng}`,
-          barangay: barangay || 'NOT SET',
-          title: title || 'NOT SET',
-          dateTime: dateTime || 'NOT SET',
-          incidentType: incidentType || 'NOT SET',
-          status: status || 'NOT SET',
-          isSensitive: isSensitive,
-          description: description ? description.substring(0, 50) + '...' : 'NOT SET'
+          coordinates: `lat=${report.geoLocation.latitude}, lng=${report.geoLocation.longitude}`,
+          barangay: report.barangay || 'NOT SET',
+          title: report.title || 'NOT SET',
+          dateTime: report.dateTime || 'NOT SET',
+          incidentType: report.incidentType || 'NOT SET',
+          status: report.status || 'NOT SET',
+          isSensitive: report.isSensitive,
+          description: report.description ? report.description.substring(0, 50) + '...' : 'NOT SET'
         });
         
         // Only include reports that have valid coordinates
@@ -170,25 +166,7 @@ export class ReportsService {
       
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        
-        const report: Report = {
-          id: doc.id,
-          barangay: data.Barangay || '',
-          dateTime: data.DateTime || '',
-          description: data.Description || '',
-          geoLocation: {
-            latitude: data.GeoLocation?._lat || data.Latitude || 0,
-            longitude: data.GeoLocation?._long || data.Longitude || 0
-          },
-          incidentType: data.IncidentType || '',
-          latitude: data.Latitude || data.GeoLocation?._lat || 0,
-          longitude: data.Longitude || data.GeoLocation?._long || 0,
-          mediaType: data.MediaType || null,
-          mediaURL: data.MediaURL || null,
-          status: data.Status || 'Pending',
-          submittedByEmail: data.SubmittedByEmail || '',
-          hasMedia: data.hasMedia || data.MediaURL ? true : false
-        };
+        const report = this.mapToReport(doc.id, data);
         
         if (report.geoLocation.latitude !== 0 && report.geoLocation.longitude !== 0) {
           reports.push(report);
@@ -205,6 +183,106 @@ export class ReportsService {
         success: false,
         error: error.message || 'Failed to fetch reports'
       };
+    }
+  }
+
+  /**
+   * Fetch current user's reports (both PascalCase and camelCase fields supported)
+   */
+  static async getReportsByUser(email: string): Promise<{ success: boolean; data?: Report[]; error?: string }> {
+    try {
+      const reportsCollection = collection(firestore, 'reports');
+      const q1 = query(reportsCollection, where('SubmittedByEmail', '==', email));
+      const q2 = query(reportsCollection, where('submittedByEmail', '==', email));
+
+      const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+      const map = new Map<string, Report>();
+      snap1.forEach((d) => map.set(d.id, this.mapToReport(d.id, d.data())));
+      snap2.forEach((d) => map.set(d.id, this.mapToReport(d.id, d.data())));
+
+      // Optional: sort by createdAt/DateTime desc if available
+      const items = Array.from(map.values());
+      items.sort((a, b) => (new Date(b.dateTime).getTime() || 0) - (new Date(a.dateTime).getTime() || 0));
+
+      return { success: true, data: items };
+    } catch (error: any) {
+      console.error('Error fetching user reports:', error);
+      return { success: false, error: error.message || 'Failed to fetch user reports' };
+    }
+  }
+
+  /**
+   * Realtime subscription for current user's reports. Returns unsubscribe function.
+   */
+  static onUserReportsSnapshot(
+    email: string,
+    onItems: (items: Report[]) => void,
+    onError?: (error?: string) => void
+  ): () => void {
+    try {
+      const colRef = collection(firestore, 'reports');
+      const q1 = query(colRef, where('SubmittedByEmail', '==', email));
+      const q2 = query(colRef, where('submittedByEmail', '==', email));
+
+      const current = new Map<string, Report>();
+      const emit = () => {
+        const items = Array.from(current.values());
+        items.sort((a, b) => (new Date(b.dateTime).getTime() || 0) - (new Date(a.dateTime).getTime() || 0));
+        onItems(items);
+      };
+
+      const u1 = onSnapshot(q1, (snap) => {
+        snap.docChanges().forEach((ch) => {
+          if (ch.type === 'removed') {
+            current.delete(ch.doc.id);
+          } else {
+            current.set(ch.doc.id, this.mapToReport(ch.doc.id, ch.doc.data()));
+          }
+        });
+        emit();
+      }, (err) => onError && onError(err?.message));
+
+      const u2 = onSnapshot(q2, (snap) => {
+        snap.docChanges().forEach((ch) => {
+          if (ch.type === 'removed') {
+            current.delete(ch.doc.id);
+          } else {
+            current.set(ch.doc.id, this.mapToReport(ch.doc.id, ch.doc.data()));
+          }
+        });
+        emit();
+      }, (err) => onError && onError(err?.message));
+
+      return () => {
+        try { u1(); } catch {}
+        try { u2(); } catch {}
+      };
+    } catch (e: any) {
+      onError && onError(e?.message || 'Subscription failed');
+      return () => {};
+    }
+  }
+
+  /**
+   * Delete a report only if its status is Pending
+   */
+  static async deleteReportIfPending(reportId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const reportRef = doc(firestore, 'reports', reportId);
+      const snap = await getDoc(reportRef);
+      if (!snap.exists()) return { success: false, error: 'Report not found' };
+
+      const data = snap.data();
+      const status = data.Status || data.status || 'Pending';
+      if (status !== 'Pending') {
+        return { success: false, error: 'Only pending reports can be deleted' };
+      }
+
+      await deleteDoc(reportRef);
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error deleting report:', error);
+      return { success: false, error: error.message || 'Failed to delete report' };
     }
   }
 

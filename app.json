@@ -36,8 +36,7 @@
         "VIBRATE",
         "RECEIVE_BOOT_COMPLETED"
       ],
-      "package": "com.reportit.mobile",
-      "useNextNotificationsApi": true
+      "package": "com.reportit.mobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -49,7 +48,6 @@
         {
           "icon": "./assets/icon.png",
           "color": "#EF4444",
-          "sounds": ["./assets/notification-sound.wav"],
           "mode": "production"
         }
       ]
@@ -59,6 +57,11 @@
       "color": "#EF4444",
       "androidMode": "default",
       "androidCollapsedTitle": "ReportIt"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "029d2cb2-70d2-46a0-bef7-f262df3525a7"
+      }
     }
   }
 }

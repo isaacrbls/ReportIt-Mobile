@@ -7,6 +7,8 @@ import {
   ScrollView,
   SafeAreaView,
   Animated,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import Svg, { Path, G } from 'react-native-svg';
 import LocationService from '../services/LocationService';
@@ -170,9 +172,9 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#EF4444',
-    paddingTop: 20,
-    paddingBottom: 20,
-    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 16 : 60,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
   },
   headerContent: {
     flexDirection: 'row',

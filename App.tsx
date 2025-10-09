@@ -14,13 +14,11 @@ import WelcomeScreen from './screens/WelcomeScreen';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
-import VerifyEmailScreen from './screens/VerifyEmailScreen';
-import CreateNewPasswordScreen from './screens/CreateNewPasswordScreen';
-import PasswordResetCompleteScreen from './screens/PasswordResetCompleteScreen';
 import TermsAndConditionsScreen from './screens/TermsAndConditionsScreen';
 import MapScreen from './screens/MapScreen';
 import IncidentAnalysisScreen from './screens/IncidentAnalysisScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
+import ViewReportsScreen from './screens/ViewReportsScreen';
 
 const Stack = createStackNavigator();
 
@@ -194,30 +192,6 @@ function AppNavigator() {
             }}
           />
           <Stack.Screen 
-            name="VerifyEmail" 
-            component={VerifyEmailScreen}
-            options={{ 
-              gestureEnabled: true, // Can swipe back to forgot password
-              gestureDirection: 'horizontal'
-            }}
-          />
-          <Stack.Screen 
-            name="CreateNewPassword" 
-            component={CreateNewPasswordScreen}
-            options={{ 
-              gestureEnabled: true, // Can swipe back to verify email
-              gestureDirection: 'horizontal'
-            }}
-          />
-          <Stack.Screen 
-            name="PasswordResetComplete" 
-            component={PasswordResetCompleteScreen}
-            options={{ 
-              gestureEnabled: false, // No back from completion screen
-              animationTypeForReplace: 'push'
-            }}
-          />
-          <Stack.Screen 
             name="TermsAndConditions" 
             component={TermsAndConditionsScreen}
             options={{ 
@@ -236,6 +210,14 @@ function AppNavigator() {
           <Stack.Screen 
             name="IncidentAnalysis" 
             component={IncidentAnalysisScreen}
+            options={{ 
+              gestureEnabled: true, // Can swipe back to map
+              gestureDirection: 'horizontal'
+            }}
+          />
+          <Stack.Screen 
+            name="ViewReports" 
+            component={ViewReportsScreen}
             options={{ 
               gestureEnabled: true, // Can swipe back to map
               gestureDirection: 'horizontal'

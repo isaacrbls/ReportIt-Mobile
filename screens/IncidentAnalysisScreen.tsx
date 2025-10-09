@@ -9,6 +9,8 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import FontAwesome from '@react-native-vector-icons/fontawesome';
 import Svg, { Rect, G, Text as SvgText, Line } from 'react-native-svg';
@@ -512,9 +514,9 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#EF4444',
-    paddingTop: responsiveSize(20, 25, 30),
-    paddingBottom: responsiveSize(20, 25, 30),
-    paddingHorizontal: responsivePadding(24),
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 16 : 60,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
