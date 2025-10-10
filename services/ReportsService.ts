@@ -477,6 +477,8 @@ export class ReportsService {
         if (r.status !== "Verified") return false;
         if (r.geoLocation.latitude === 0 || r.geoLocation.longitude === 0) return false;
         if (targetBarangay && r.barangay !== targetBarangay) return false;
+        // Exclude sensitive reports from hotspot calculation
+        if (r.isSensitive) return false;
         
         // Check if report is within last 30 days
         try {

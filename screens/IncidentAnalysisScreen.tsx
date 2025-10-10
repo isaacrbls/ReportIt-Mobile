@@ -11,6 +11,7 @@ import {
   Alert,
   StatusBar,
   Platform,
+  Modal,
 } from 'react-native';
 import FontAwesome from '@react-native-vector-icons/fontawesome';
 import Svg, { Rect, G, Text as SvgText, Line } from 'react-native-svg';
@@ -162,13 +163,14 @@ interface IncidentAnalysisScreenProps {
 }
 
 const IncidentAnalysisScreen: React.FC<IncidentAnalysisScreenProps> = ({ navigation }) => {
-  const [selectedPeriod, setSelectedPeriod] = useState('monthly'); // 'weekly', 'monthly', 'yearly'
+  const [selectedPeriod, setSelectedPeriod] = useState('monthly'); // 'daily', 'monthly', 'yearly'
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [chartData, setChartData] = useState<any[]>([]);
   const [riskData, setRiskData] = useState<any[]>([]);
   const [totalIncidents, setTotalIncidents] = useState(0);
   const [trendPercentage, setTrendPercentage] = useState(0);
+  const [isDropdownVisible, setIsDropdownVisible] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -235,8 +237,8 @@ const IncidentAnalysisScreen: React.FC<IncidentAnalysisScreenProps> = ({ navigat
     let cutoffDate: Date;
     
     switch(period) {
-      case 'weekly':
-        cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      case 'daily':
+        cutoffDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         break;
       case 'monthly':
         cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -263,10 +265,10 @@ const IncidentAnalysisScreen: React.FC<IncidentAnalysisScreenProps> = ({ navigat
       categoryCounts[category] = (categoryCounts[category] || 0) + 1;
     });
     
-    // Sort by count and take top 8 for better readability
+    // Sort by count and take top 3 for better readability
     const sortedCategories = Object.entries(categoryCounts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
+      .slice(0, 3)
       .map(([label, value]) => ({
         label: label.length > 8 ? label.substring(0, 6) + '..' : label,
         value,
@@ -327,7 +329,7 @@ const IncidentAnalysisScreen: React.FC<IncidentAnalysisScreenProps> = ({ navigat
       const recencyWeight = stats.lastIncidentDays < 7 ? 20 : stats.lastIncidentDays < 30 ? 10 : 0;
       
       // Calculate trend (recent vs historical average)
-      const periodDays = selectedPeriod === 'weekly' ? 7 : selectedPeriod === 'yearly' ? 365 : 30;
+      const periodDays = selectedPeriod === 'daily' ? 1 : selectedPeriod === 'yearly' ? 365 : 30;
       const historicalAvg = stats.total / 365; // Daily average
       const recentAvg = stats.recent / periodDays;
       stats.trend = ((recentAvg - historicalAvg) / Math.max(historicalAvg, 0.1)) * 100;
@@ -390,14 +392,14 @@ const IncidentAnalysisScreen: React.FC<IncidentAnalysisScreenProps> = ({ navigat
 
   const getPeriodLabel = (period: string): string => {
     switch(period) {
-      case 'weekly':
-        return 'Weekly';
+      case 'daily':
+        return 'Today';
       case 'monthly':
-        return 'Monthly';
+        return 'This Month';
       case 'yearly':
-        return 'Yearly';
+        return 'This Year';
       default:
-        return 'Monthly';
+        return 'This Month';
     }
   };
 
@@ -445,13 +447,7 @@ const IncidentAnalysisScreen: React.FC<IncidentAnalysisScreenProps> = ({ navigat
               <Text style={styles.chartTitle}>Incident Types</Text>
               <TouchableOpacity 
                 style={styles.dropdown}
-                onPress={() => {
-                  // Cycle through periods: Weekly -> Monthly -> Yearly
-                  const periods = ['weekly', 'monthly', 'yearly'];
-                  const currentIndex = periods.indexOf(selectedPeriod);
-                  const nextIndex = (currentIndex + 1) % periods.length;
-                  setSelectedPeriod(periods[nextIndex]);
-                }}
+                onPress={() => setIsDropdownVisible(true)}
               >
                 <Text style={styles.dropdownText}>{getPeriodLabel(selectedPeriod)}</Text>
                 <FontAwesome name="chevron-down" size={12} color="#000000" />
@@ -503,6 +499,71 @@ const IncidentAnalysisScreen: React.FC<IncidentAnalysisScreenProps> = ({ navigat
           <FontAwesome name="bar-chart" size={24} color="white" />
         </TouchableOpacity>
       </View>
+
+      {/* Period Dropdown Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isDropdownVisible}
+        onRequestClose={() => setIsDropdownVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.dropdownModalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsDropdownVisible(false)}
+        >
+          <View style={styles.dropdownModalContent}>
+            <TouchableOpacity
+              style={styles.dropdownOption}
+              onPress={() => {
+                setSelectedPeriod('daily');
+                setIsDropdownVisible(false);
+              }}
+            >
+              <Text style={[styles.dropdownOptionText, selectedPeriod === 'daily' && styles.dropdownOptionTextActive]}>
+                Today
+              </Text>
+              {selectedPeriod === 'daily' && (
+                <FontAwesome name="check" size={16} color="#EF4444" />
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.dropdownDivider} />
+
+            <TouchableOpacity
+              style={styles.dropdownOption}
+              onPress={() => {
+                setSelectedPeriod('monthly');
+                setIsDropdownVisible(false);
+              }}
+            >
+              <Text style={[styles.dropdownOptionText, selectedPeriod === 'monthly' && styles.dropdownOptionTextActive]}>
+                This Month
+              </Text>
+              {selectedPeriod === 'monthly' && (
+                <FontAwesome name="check" size={16} color="#EF4444" />
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.dropdownDivider} />
+
+            <TouchableOpacity
+              style={styles.dropdownOption}
+              onPress={() => {
+                setSelectedPeriod('yearly');
+                setIsDropdownVisible(false);
+              }}
+            >
+              <Text style={[styles.dropdownOptionText, selectedPeriod === 'yearly' && styles.dropdownOptionTextActive]}>
+                This Year
+              </Text>
+              {selectedPeriod === 'yearly' && (
+                <FontAwesome name="check" size={16} color="#EF4444" />
+              )}
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -691,6 +752,46 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Poppins_500Medium',
     color: '#6B7280',
+  },
+  dropdownModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dropdownModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 8,
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  dropdownOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  dropdownOptionText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_400Regular',
+    color: '#111827',
+  },
+  dropdownOptionTextActive: {
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#EF4444',
+  },
+  dropdownDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
   },
 });
 

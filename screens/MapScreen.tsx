@@ -17,7 +17,10 @@ import {
 import FontAwesome from '@react-native-vector-icons/fontawesome';
 import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Camera } from 'expo-camera';
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { storage } from '../config/firebase';
 import LocationService, { LocationCoords } from '../services/LocationService';
 import { ReportsService, Report, Hotspot, CreateReportData } from '../services/ReportsService';
 import { AuthService } from '../services/AuthService';
@@ -222,7 +225,7 @@ const MapView = React.forwardRef<any, { userLocation: LocationCoords | null; rep
             ${userLocation ? `
             debugLog('Adding user location marker at [${userLocation.latitude}, ${userLocation.longitude}]');
             try {
-                L.marker([${userLocation.latitude}, ${userLocation.longitude}], {icon: userIcon})
+                L.marker([${userLocation.latitude}, ${userLocation.longitude}], {icon: userIcon, zIndexOffset: 1000})
                     .addTo(map)
                     .bindPopup('<div style="font-weight: bold; color: #EF4444;">Your Current Location</div>');
                 debugLog('User location marker added');
@@ -1105,6 +1108,64 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     setIsReportModalVisible(true);
   };
 
+  // Upload media to Firebase Storage
+  const uploadMediaToStorage = async (mediaAsset: ImagePicker.ImagePickerAsset, userEmail: string): Promise<string | null> => {
+    try {
+      const fileUri = mediaAsset.uri;
+      const fileType = mediaAsset.type || 'image'; // 'image' or 'video'
+      
+      // Get file extension
+      const fileExtension = fileUri.split('.').pop() || (fileType === 'video' ? 'mp4' : 'jpg');
+      
+      // Generate unique filename with timestamp and sanitized email
+      const timestamp = Date.now();
+      const sanitizedEmail = userEmail.replace(/[^a-zA-Z0-9]/g, '_');
+      const fileName = `${fileType}s/${sanitizedEmail}/${timestamp}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
+      
+      console.log('📤 Uploading file to Firebase Storage:', fileName);
+      
+      // Fetch the file as a blob directly from the URI
+      const response = await fetch(fileUri);
+      const blob = await response.blob();
+      
+      console.log('📦 Blob created, size:', blob.size, 'bytes');
+      
+      // Create storage reference
+      const storageReference = storageRef(storage, `reports/${fileName}`);
+      
+      // Upload file
+      const uploadTask = uploadBytesResumable(storageReference, blob);
+      
+      // Wait for upload to complete
+      await new Promise((resolve, reject) => {
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            console.log(`📊 Upload progress: ${progress.toFixed(0)}%`);
+          },
+          (error) => {
+            console.error('❌ Upload error:', error);
+            reject(error);
+          },
+          () => {
+            console.log('✅ Upload completed');
+            resolve(uploadTask.snapshot);
+          }
+        );
+      });
+      
+      // Get download URL
+      const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+      console.log('✅ File uploaded successfully:', downloadURL);
+      
+      return downloadURL;
+    } catch (error: any) {
+      console.error('❌ Error uploading media:', error);
+      throw error;
+    }
+  };
+
   const handleSubmitReport = async () => {
     // Check if user is authenticated
     const currentUser = AuthService.getCurrentUser();
@@ -1249,17 +1310,48 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         location: `${reportData.latitude}, ${reportData.longitude}`
       });
 
-      // Add media information if any media is selected
+      // Upload media to Firebase Storage if any media is selected
       if (selectedMedia.length > 0) {
-        const mediaTypes = selectedMedia.map(media => media.type).join(', ');
-        reportData.mediaType = `${selectedMedia.length} files: ${mediaTypes}`;
-        reportData.mediaURL = selectedMedia.map(media => media.uri).join(';');
+        console.log(`📤 Uploading ${selectedMedia.length} media files to Firebase Storage...`);
         
-        console.log('📸 Report includes media:', {
-          count: selectedMedia.length,
-          types: mediaTypes,
-          firstFile: selectedMedia[0].uri
-        });
+        try {
+          const uploadPromises = selectedMedia.map(async (media, index) => {
+            console.log(`📤 Uploading file ${index + 1}/${selectedMedia.length}...`);
+            const downloadURL = await uploadMediaToStorage(media, currentUser.email || 'unknown');
+            return downloadURL;
+          });
+          
+          const downloadURLs = await Promise.all(uploadPromises);
+          
+          // Filter out any failed uploads (null values)
+          const successfulUploads = downloadURLs.filter(url => url !== null);
+          
+          if (successfulUploads.length === 0) {
+            throw new Error('All media uploads failed');
+          }
+          
+          if (successfulUploads.length < downloadURLs.length) {
+            console.warn(`⚠️ ${downloadURLs.length - successfulUploads.length} uploads failed`);
+          }
+          
+          const mediaTypes = selectedMedia.map(media => media.type).join(', ');
+          reportData.mediaType = `${successfulUploads.length} files: ${mediaTypes}`;
+          reportData.mediaURL = successfulUploads.join(';');
+          
+          console.log('✅ All media uploaded successfully:', {
+            count: successfulUploads.length,
+            urls: successfulUploads
+          });
+        } catch (uploadError: any) {
+          console.error('❌ Error uploading media:', uploadError);
+          setIsSubmittingReport(false);
+          Alert.alert(
+            'Upload Error',
+            `Failed to upload media files: ${uploadError.message}. The report was not submitted.`,
+            [{ text: 'OK' }]
+          );
+          return; // Exit early on upload error
+        }
       }
 
       console.log('📍 Report will be submitted with location:', {
@@ -1356,6 +1448,25 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           Alert.alert('Limit Exceeded', 'You can only select up to 5 media files.');
           return;
         }
+        
+        // Check file size (10MB limit for images)
+        const asset = result.assets[0];
+        try {
+          const fileInfo = await FileSystem.getInfoAsync(asset.uri);
+          if (fileInfo.exists && fileInfo.size) {
+            const fileSizeMB = fileInfo.size / (1024 * 1024);
+            if (fileSizeMB > 10) {
+              Alert.alert(
+                'File Too Large',
+                `Image size is ${fileSizeMB.toFixed(1)}MB. Maximum allowed size is 10MB.`
+              );
+              return;
+            }
+          }
+        } catch (sizeError) {
+          console.warn('Could not check file size:', sizeError);
+        }
+        
         setSelectedMedia(prevMedia => [...prevMedia, ...result.assets]);
         console.log('📷 Photo captured from camera:', result.assets[0].uri);
       }
@@ -1385,6 +1496,24 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         if (selectedMedia.length >= 5) {
           Alert.alert('Limit Exceeded', 'You can only select up to 5 media files.');
           return;
+        }
+        
+        // Check file size (20MB limit for videos)
+        const asset = result.assets[0];
+        try {
+          const fileInfo = await FileSystem.getInfoAsync(asset.uri);
+          if (fileInfo.exists && fileInfo.size) {
+            const fileSizeMB = fileInfo.size / (1024 * 1024);
+            if (fileSizeMB > 20) {
+              Alert.alert(
+                'File Too Large',
+                `Video size is ${fileSizeMB.toFixed(1)}MB. Maximum allowed size is 20MB.`
+              );
+              return;
+            }
+          }
+        } catch (sizeError) {
+          console.warn('Could not check file size:', sizeError);
         }
         
         setSelectedMedia(prevMedia => [...prevMedia, ...result.assets]);
@@ -1430,6 +1559,25 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           Alert.alert('Limit Exceeded', 'You can only select up to 5 media files.');
           return;
         }
+        
+        // Check file size (20MB limit for videos)
+        const asset = result.assets[0];
+        try {
+          const fileInfo = await FileSystem.getInfoAsync(asset.uri);
+          if (fileInfo.exists && fileInfo.size) {
+            const fileSizeMB = fileInfo.size / (1024 * 1024);
+            if (fileSizeMB > 20) {
+              Alert.alert(
+                'File Too Large',
+                `Video size is ${fileSizeMB.toFixed(1)}MB. Maximum allowed size is 20MB.`
+              );
+              return;
+            }
+          }
+        } catch (sizeError) {
+          console.warn('Could not check file size:', sizeError);
+        }
+        
         setSelectedMedia(prevMedia => [...prevMedia, ...result.assets]);
         console.log('🎥 Video recorded from camera:', result.assets[0].uri);
       }
@@ -1808,23 +1956,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
                     <Text style={styles.menuItemText}>Edit Profile</Text>
                   </TouchableOpacity>
 
-                  {/* Analysis - Only for logged in users */}
-                  <TouchableOpacity 
-                    style={styles.menuItem}
-                    onPress={() => {
-                      Animated.timing(slideAnim, {
-                        toValue: -280,
-                        duration: 300,
-                        useNativeDriver: true,
-                      }).start(() => {
-                        setIsSidebarVisible(false);
-                        navigation.navigate('IncidentAnalysis');
-                      });
-                    }}
-                  >
-                    <Text style={styles.menuItemText}>Incident Analysis</Text>
-                  </TouchableOpacity>
-
                   {/* View Reports - Only for logged in users */}
                   <TouchableOpacity 
                     style={styles.menuItem}
@@ -1879,6 +2010,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
                   </TouchableOpacity>
                 </>
               )}
+
+              {/* Incident Analysis - Always visible */}
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => {
+                  Animated.timing(slideAnim, {
+                    toValue: -280,
+                    duration: 300,
+                    useNativeDriver: true,
+                  }).start(() => {
+                    setIsSidebarVisible(false);
+                    navigation.navigate('IncidentAnalysis');
+                  });
+                }}
+              >
+                <Text style={styles.menuItemText}>Incident Analysis</Text>
+              </TouchableOpacity>
 
               {/* Terms and Conditions - Always visible */}
               <TouchableOpacity 

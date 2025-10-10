@@ -128,6 +128,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   const [selectedBarangay, setSelectedBarangay] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [isBarangayModalVisible, setIsBarangayModalVisible] = useState(false);
+  const [isTermsRequiredModalVisible, setIsTermsRequiredModalVisible] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({
@@ -146,13 +147,19 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   // Handle hardware back button with modal priority and logical navigation
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      // Priority 1: Close modal if visible
+      // Priority 1: Close terms required modal if visible
+      if (isTermsRequiredModalVisible) {
+        setIsTermsRequiredModalVisible(false);
+        return true; // Prevent default back behavior
+      }
+      
+      // Priority 2: Close barangay modal if visible
       if (isBarangayModalVisible) {
         setIsBarangayModalVisible(false);
         return true; // Prevent default back behavior
       }
       
-      // Priority 2: Use logical navigation
+      // Priority 3: Use logical navigation
       const context = NavigationHelper.createContext('Signup', route?.params?.fromTerms ? 'TermsAndConditions' : undefined);
       const handled = NavigationHelper.handleBackNavigation(navigation, 'Signup', context);
       
@@ -160,7 +167,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
     });
 
     return () => backHandler.remove();
-  }, [isBarangayModalVisible, navigation, route]);
+  }, [isTermsRequiredModalVisible, isBarangayModalVisible, navigation, route]);
 
   React.useEffect(() => {
     if (route?.params?.termsAccepted === true) {
@@ -287,8 +294,8 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
 
     // Terms validation
     if (!agreeToTerms) {
-      newErrors.terms = 'You must agree to the terms and conditions';
-      isValid = false;
+      setIsTermsRequiredModalVisible(true);
+      return false;
     }
 
     setErrors(newErrors);
@@ -666,6 +673,61 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
+
+      {/* Terms Required Modal */}
+      <Modal
+        visible={isTermsRequiredModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setIsTermsRequiredModalVisible(false)}
+      >
+        <View style={modalStyles.termsModalOverlay}>
+          <View style={modalStyles.termsModalContent}>
+            <View style={modalStyles.termsIconContainer}>
+              <Svg width={48} height={48} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
+                  fill="#EF4444"
+                />
+              </Svg>
+            </View>
+            <Text style={modalStyles.termsModalTitle}>Terms & Conditions Required</Text>
+            <Text style={modalStyles.termsModalText}>
+              You must read and accept the Terms and Conditions before creating an account.
+            </Text>
+            <View style={modalStyles.termsModalButtons}>
+              <TouchableOpacity
+                style={modalStyles.termsModalButtonSecondary}
+                onPress={() => setIsTermsRequiredModalVisible(false)}
+              >
+                <Text style={modalStyles.termsModalButtonTextSecondary}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={modalStyles.termsModalButtonPrimary}
+                onPress={() => {
+                  setIsTermsRequiredModalVisible(false);
+                  // Navigate to Terms and Conditions with form data
+                  navigation.navigate('TermsAndConditions', {
+                    fromSignup: true,
+                    formData: {
+                      firstName,
+                      lastName,
+                      username,
+                      email,
+                      password,
+                      confirmPassword,
+                      selectedBarangay,
+                      selectedCity,
+                    }
+                  });
+                }}
+              >
+                <Text style={modalStyles.termsModalButtonTextPrimary}>Read Terms</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -942,6 +1004,79 @@ const modalStyles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: '#374151',
+  },
+  termsModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  termsModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
+    maxWidth: 400,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  termsIconContainer: {
+    marginBottom: 16,
+  },
+  termsModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Poppins_700Bold',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  termsModalText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  termsModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  termsModalButtonSecondary: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: 'white',
+    alignItems: 'center',
+  },
+  termsModalButtonTextSecondary: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#6B7280',
+  },
+  termsModalButtonPrimary: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+  },
+  termsModalButtonTextPrimary: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: 'white',
   },
 });
 
