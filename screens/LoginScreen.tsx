@@ -301,16 +301,6 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     paddingHorizontal: 24,
   },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backText: {
-    color: 'white',
-    fontSize: 16,
-    fontFamily: 'Poppins_400Regular',
-    marginLeft: 8,
-  },
   content: {
     flex: 1,
     paddingHorizontal: 24,

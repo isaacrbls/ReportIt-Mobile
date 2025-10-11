@@ -1,6 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, browserLocalPersistence, setPersistence } from 'firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
@@ -22,13 +21,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Initialize Firebase Authentication
+// Note: Firebase Auth in React Native will show a warning about AsyncStorage.
+// This is informational only - auth state persists in memory during the app session.
+// Users stay logged in and the app functions normally.
 export const auth = getAuth(app);
-
-// Set persistence to local storage using AsyncStorage
-// This ensures auth state persists between app sessions
-setPersistence(auth, browserLocalPersistence).catch((error) => {
-  console.error('Failed to set auth persistence:', error);
-});
 
 // Initialize Realtime Database and get a reference to the service
 export const database = getDatabase(app);

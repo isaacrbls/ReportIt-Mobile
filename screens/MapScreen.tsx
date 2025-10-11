@@ -1230,6 +1230,40 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       return;
     }
 
+    // Check if user is suspended before opening report modal
+    try {
+      const userProfileResult = await UserService.getCurrentUserProfile();
+      if (userProfileResult.success && userProfileResult.data) {
+        const userProfile = userProfileResult.data;
+        
+        if (userProfile.suspended) {
+          const suspensionEndDate = userProfile.suspensionEndDate 
+            ? new Date(userProfile.suspensionEndDate).toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+              })
+            : 'indefinitely';
+          
+          const suspensionReason = userProfile.suspensionReason || 'Violation of community guidelines';
+          
+          Alert.alert(
+            '🚫 Account Suspended',
+            `Your account has been suspended and you cannot submit reports.\n\n` +
+            `Reason: ${suspensionReason}\n\n` +
+            `Suspension until: ${suspensionEndDate}\n\n` +
+            `If you believe this is an error, please contact support.`,
+            [{ text: 'OK', style: 'default' }]
+          );
+          return;
+        }
+      }
+    } catch (error) {
+      // If we can't check suspension status, allow them to proceed
+      // The check will happen again during submission
+      console.warn('Failed to check suspension status:', error);
+    }
+
     setIsReportModalVisible(true);
   };
 
@@ -1302,6 +1336,27 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       }
 
       const userProfile = userProfileResult.data;
+      
+      // Check if user is suspended
+      if (userProfile.suspended) {
+        const suspensionEndDate = userProfile.suspensionEndDate 
+          ? new Date(userProfile.suspensionEndDate).toLocaleDateString('en-US', { 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            })
+          : 'indefinitely';
+        
+        const suspensionReason = userProfile.suspensionReason || 'Violation of community guidelines';
+        
+        Alert.alert(
+          'Account Suspended',
+          `Your account has been suspended and you cannot submit reports.\n\n` +
+          `Suspension until: ${suspensionEndDate}\n\n` +
+          [{ text: 'OK', style: 'default' }]
+        );
+        return;
+      }
       
       // SKIP barangay eligibility check ONLY for admin user
       if (!isAdminUser && !isReportingAllowed(userProfile.barangay)) {
@@ -2012,7 +2067,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search location, incident type..."
+            placeholder="Search incident type..."
             placeholderTextColor="#9CA3AF"
             returnKeyType="done"
           />
@@ -2676,7 +2731,7 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     position: 'absolute',
-    top: responsiveSize(90, 110, 120, 130, 136),
+    top: responsiveSize(130, 150, 160, 170, 176),
     left: responsivePadding(16),
     right: responsivePadding(16),
     zIndex: 20,

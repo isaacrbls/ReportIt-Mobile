@@ -16,6 +16,7 @@ import {
   Platform,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import {
   useFonts,
   Poppins_400Regular,
@@ -365,8 +366,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <BackIcon size={20} color="white" />
-          <Text style={styles.backText}>Back</Text>
+          <FontAwesome name="arrow-left" size={20} color="white" />
         </TouchableOpacity>
       </View>
 
@@ -746,12 +746,6 @@ const styles = StyleSheet.create({
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  backText: {
-    color: 'white',
-    fontSize: 16,
-    fontFamily: 'Poppins_500Medium',
-    marginLeft: 8,
   },
   content: {
     flex: 1,

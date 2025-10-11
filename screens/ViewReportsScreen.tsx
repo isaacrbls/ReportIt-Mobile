@@ -383,8 +383,8 @@ export default function ViewReportsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   header: {
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 16 : 60,
-    paddingBottom: 16,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 50,
+    paddingBottom: 12,
     backgroundColor: '#EF4444',
     flexDirection: 'row',
     alignItems: 'center',

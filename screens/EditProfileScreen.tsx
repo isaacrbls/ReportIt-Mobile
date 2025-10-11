@@ -341,7 +341,6 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ navigation }) => 
           onPress={() => navigation.goBack()}
         >
           <Icon name="arrow-left" size={20} color="white" />
-          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
       </View>
 
@@ -543,12 +542,6 @@ const styles = StyleSheet.create({
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  backText: {
-    color: 'white',
-    fontSize: 16,
-    fontFamily: 'Poppins_500Medium',
-    marginLeft: 8,
   },
   content: {
     flex: 1,
