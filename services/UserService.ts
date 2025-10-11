@@ -18,6 +18,9 @@ export interface UserProfile {
   updatedAt?: string;
   isActive?: boolean;
   deactivatedAt?: string;
+  suspended?: boolean;
+  suspensionEndDate?: string;
+  suspensionReason?: string;
 }
 
 export interface CreateUserProfileData {

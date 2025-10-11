@@ -21,8 +21,10 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Camera } from 'expo-camera';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../config/firebase';
+import NetInfo from '@react-native-community/netinfo';
 import LocationService, { LocationCoords } from '../services/LocationService';
 import { ReportsService, Report, Hotspot, CreateReportData } from '../services/ReportsService';
+import { OfflineReportsService } from '../services/OfflineReportsService';
 import { AuthService } from '../services/AuthService';
 import { UserService } from '../services/UserService';
 import { isReportingAllowed, BULACAN_CITIES } from '../utils/BulacanBarangays';
@@ -36,47 +38,129 @@ import {
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-// Responsive utility functions
-const isTablet = () => screenWidth >= 768;
-const isLargeTablet = () => screenWidth >= 1024;
+// Comprehensive Responsive utility functions
+// Device breakpoints based on common device widths
+const isSmallPhone = () => screenWidth < 375;        // iPhone SE 1st gen, small Androids (360px)
+const isStandardPhone = () => screenWidth >= 375 && screenWidth < 414;  // iPhone 8, X, 12/13 Pro (375-390px)
+const isLargePhone = () => screenWidth >= 414 && screenWidth < 768;     // iPhone Plus, Pro Max (414-430px)
+const isTablet = () => screenWidth >= 768;           // iPad mini and larger
+const isLargeTablet = () => screenWidth >= 1024;     // iPad Pro and larger
 
-const responsiveSize = (phone: number, tablet: number, largeTablet?: number) => {
-  if (isLargeTablet() && largeTablet) return largeTablet;
-  if (isTablet()) return tablet;
-  return phone;
+// Device height detection for notched/long devices
+const hasNotch = () => screenHeight >= 812;          // iPhone X and newer, modern Androids
+const isShortDevice = () => screenHeight < 667;      // iPhone SE, compact devices
+
+// Get device category for easier logic
+const getDeviceSize = () => {
+  if (isLargeTablet()) return 'xlarge';
+  if (isTablet()) return 'large';
+  if (isLargePhone()) return 'medium-large';
+  if (isStandardPhone()) return 'medium';
+  if (isSmallPhone()) return 'small';
+  return 'medium';
 };
 
-const responsiveFontSize = (size: number) => {
-  const scale = screenWidth / 375; // Base on iPhone SE width
-  const newSize = size * scale;
-  if (isTablet()) return Math.round(newSize * 0.9); // Slightly smaller on tablets
-  return Math.round(newSize);
+// Responsive size with granular device support
+const responsiveSize = (small: number, medium: number, mediumLarge: number, large: number, xlarge?: number) => {
+  if (isLargeTablet() && xlarge) return xlarge;
+  if (isTablet()) return large;
+  if (isLargePhone()) return mediumLarge;
+  if (isStandardPhone()) return medium;
+  if (isSmallPhone()) return small;
+  return medium;
 };
 
-const responsivePadding = (size: number) => {
-  return responsiveSize(size, size * 1.5, size * 2);
+// Improved font scaling with min/max constraints
+const responsiveFontSize = (baseSize: number) => {
+  // Base scale on iPhone 11 (414px) for better modern device support
+  const baseWidth = 414;
+  let scale = screenWidth / baseWidth;
+  
+  // Constrain scale to prevent too small or too large fonts
+  scale = Math.max(0.85, Math.min(scale, 1.15));
+  
+  let fontSize = baseSize * scale;
+  
+  // Apply device-specific adjustments
+  if (isSmallPhone()) {
+    fontSize = baseSize * 0.9; // Slightly smaller for small devices
+  } else if (isTablet()) {
+    fontSize = baseSize * 1.1; // Slightly larger for tablets
+  }
+  
+  // Ensure minimum readability
+  const minSize = baseSize * 0.85;
+  const maxSize = baseSize * 1.2;
+  
+  return Math.round(Math.max(minSize, Math.min(fontSize, maxSize)));
+};
+
+// Responsive padding with device-specific scaling
+const responsivePadding = (base: number) => {
+  return responsiveSize(
+    base * 0.8,      // small phones
+    base,            // standard phones  
+    base * 1.1,      // large phones
+    base * 1.3,      // tablets
+    base * 1.5       // large tablets
+  );
+};
+
+// Responsive width (percentage-based)
+const responsiveWidth = (percentage: number) => {
+  return (screenWidth * percentage) / 100;
+};
+
+// Responsive height (percentage-based)
+const responsiveHeight = (percentage: number) => {
+  return (screenHeight * percentage) / 100;
+};
+
+// Ensure minimum touch target size (iOS HIG: 44x44pt, Material: 48x48dp)
+const minimumTouchTarget = (size: number) => {
+  const minSize = 44;
+  return Math.max(size, minSize);
+};
+
+// Get safe area insets for notched devices
+const getSafeAreaTop = () => {
+  if (hasNotch()) return responsiveSize(44, 44, 47, 50, 50);
+  return responsiveSize(20, 20, 24, 24, 24);
+};
+
+const getSafeAreaBottom = () => {
+  if (hasNotch()) return responsiveSize(34, 34, 34, 34, 34);
+  return 0;
+};
+
+// Responsive icon sizes
+const getIconSize = (base: number) => {
+  return responsiveSize(
+    base * 0.9,      // small
+    base,            // medium
+    base * 1.05,     // medium-large
+    base * 1.15,     // large
+    base * 1.25      // xlarge
+  );
 };
 
 const MapView = React.forwardRef<any, { userLocation: LocationCoords | null; reports: Report[]; hotspots: Hotspot[] }>(
   ({ userLocation, reports, hotspots }, ref) => {
-  console.log('🗺️ MapView rendering with:', {
-    userLocation: userLocation ? `${userLocation.latitude}, ${userLocation.longitude}` : 'null',
-    reportsCount: reports.length,
-    hotspotsCount: hotspots.length
-  });
-
   const mapWidth = screenWidth;
-  // Responsive map height - more space on tablets
-  const mapHeight = isTablet() 
-    ? screenHeight - responsiveSize(180, 200, 220)
-    : screenHeight - 200;
+  // Responsive map height - adapts to device size and safe areas
+  const headerHeight = responsiveSize(
+    160,  // small phones - compact header
+    170,  // standard phones
+    180,  // large phones
+    200,  // tablets
+    220   // large tablets
+  );
+  const safeTop = getSafeAreaTop();
+  const mapHeight = screenHeight - headerHeight - safeTop;
 
   const mapCenter = userLocation 
     ? [userLocation.latitude, userLocation.longitude]
     : [14.7942, 120.8781];
-  
-  console.log('🗺️ Map center:', mapCenter, 'Size:', mapWidth, 'x', mapHeight);
-
   const leafletHTML = `
     <!DOCTYPE html>
     <html>
@@ -124,7 +208,6 @@ const MapView = React.forwardRef<any, { userLocation: LocationCoords | null; rep
         <script>
             // Debug logging function
             function debugLog(message) {
-                console.log('[MAP DEBUG]', message);
                 if (window.ReactNativeWebView) {
                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'debug', message: message }));
                 }
@@ -429,10 +512,6 @@ const MapView = React.forwardRef<any, { userLocation: LocationCoords | null; rep
     </body>
     </html>
   `;
-
-  console.log('🗺️ Generated HTML length:', leafletHTML.length, 'characters');
-  console.log('🗺️ HTML starts with:', leafletHTML.substring(0, 50));
-
   return (
     <WebView
       source={{ html: leafletHTML }}
@@ -447,14 +526,11 @@ const MapView = React.forwardRef<any, { userLocation: LocationCoords | null; rep
       onLoadEnd={() => console.log('🗺️ Map loaded successfully')}
       onError={(syntheticEvent) => {
         const { nativeEvent } = syntheticEvent;
-        console.error('WebView error:', nativeEvent);
       }}
       onMessage={(event) => {
-        console.log('WebView message:', event.nativeEvent.data);
       }}
       onHttpError={(syntheticEvent) => {
         const { nativeEvent } = syntheticEvent;
-        console.error('WebView HTTP error:', nativeEvent);
       }}
       originWhitelist={['*']}
       ref={ref}
@@ -506,12 +582,25 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   const [showNotification, setShowNotification] = useState(false);
   const [currentNotification, setCurrentNotification] = useState<Report | null>(null);
   const [previousReportIds, setPreviousReportIds] = useState<Set<string>>(new Set());
+  const isFirstReportLoad = useRef(true); // Track first load to avoid showing notifications on initial mount
   const notificationAnimation = useRef(new Animated.Value(-100)).current;
   
   // Media-related state
   const [selectedMedia, setSelectedMedia] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [isMediaPickerVisible, setIsMediaPickerVisible] = useState(false);
   const [cameraPermissionGranted, setCameraPermissionGranted] = useState(false);
+  
+  // Location caching for offline reporting
+  const [lastKnownLocation, setLastKnownLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    timestamp: number;
+  } | null>(null);
+  
+  // Network and offline state
+  const [isConnected, setIsConnected] = useState<boolean>(true);
+  const [pendingReportsCount, setPendingReportsCount] = useState<number>(0);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
   
   const slideAnim = useRef(new Animated.Value(-280)).current;
 
@@ -550,8 +639,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
 
     setIsSearching(true);
     const query = searchQuery.toLowerCase().trim();
-    console.log('🔍 Searching for:', query);
-
     try {
       // Search in reports
       const matchingReports = reports.filter(report => {
@@ -587,8 +674,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       ];
 
       setSearchResults(results);
-      console.log(`🔍 Found ${results.length} results (${matchingReports.length} reports, ${matchingBarangays.length} barangays)`);
-
       // Pan to nearest result
       if (results.length > 0) {
         const firstResult = results[0];
@@ -603,7 +688,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             webViewRef.current.injectJavaScript(`
               if (typeof map !== 'undefined') {
                 map.setView([${lat}, ${lng}], 16);
-                console.log('Panned to report at ${lat}, ${lng}');
               }
               true;
             `);
@@ -617,7 +701,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             webViewRef.current.injectJavaScript(`
               if (typeof map !== 'undefined') {
                 map.setView([${lat}, ${lng}], 15);
-                console.log('Panned to barangay at ${lat}, ${lng}');
               }
               true;
             `);
@@ -631,7 +714,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         );
       }
     } catch (error: any) {
-      console.error('❌ Search error:', error);
       Alert.alert('Search Error', error.message || 'Failed to search');
     } finally {
       setIsSearching(false);
@@ -641,7 +723,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   // Function to fetch reports from Firestore
   const fetchReports = async () => {
     setIsLoadingReports(true);
-    console.log('Starting to fetch reports from Firestore...');
     try {
       const result = await ReportsService.getAllReports();
       if (result.success && result.data) {
@@ -661,39 +742,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             
             return reportDate >= thirtyDaysAgo;
           } catch (e) {
-            console.warn('⚠️ Invalid date format for report:', report.id);
             return false;
           }
         });
         setReports(verifiedReports);
-        console.log(`✅ Successfully loaded ${verifiedReports.length} verified non-sensitive reports out of ${result.data.length} total reports`);
-        
         // Log sample report for debugging with all requested fields
         if (result.data.length > 0) {
           const sample = result.data[0];
-          console.log('📋 Sample Report Details:', {
-            id: sample.id,
-            barangay: sample.barangay,
-            dateTime: sample.dateTime,
-            description: sample.description,
-            incidentType: sample.incidentType,
-            status: sample.status,
-            coordinates: `${sample.geoLocation.latitude}, ${sample.geoLocation.longitude}`,
-            submittedBy: sample.submittedByEmail
-          });
         }
         
         // Show summary of all reports
         const reportsWithAllFields = result.data.filter(r => 
           r.barangay && r.dateTime && r.description && r.incidentType && r.status
         );
-        console.log(`📊 Reports with complete data: ${reportsWithAllFields.length}/${result.data.length}`);
       } else {
-        console.error('❌ Failed to fetch reports:', result.error);
         Alert.alert('Error', `Failed to load reports: ${result.error}`);
       }
     } catch (error: any) {
-      console.error('❌ Exception while fetching reports:', error);
       Alert.alert('Error', `Failed to load reports: ${error.message}`);
     } finally {
       setIsLoadingReports(false);
@@ -703,18 +768,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   // Function to fetch hotspots
   const fetchHotspots = async () => {
     setIsLoadingHotspots(true);
-    console.log('🔥 Starting to calculate hotspots...');
     try {
       const result = await ReportsService.calculateHotspots();
       if (result.success && result.data) {
         setHotspots(result.data);
-        console.log(`🔥 Successfully calculated ${result.data.length} hotspots`);
       } else {
-        console.error('❌ Failed to calculate hotspots:', result.error);
         // Don't show alert for hotspot errors - it's a secondary feature
       }
     } catch (error: any) {
-      console.error('❌ Exception while calculating hotspots:', error);
     } finally {
       setIsLoadingHotspots(false);
     }
@@ -756,7 +817,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         report.id
       );
     } catch (error) {
-      console.error('Error sending push notification:', error);
     }
   };
 
@@ -775,44 +835,29 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
 
   // Function to check authentication status and load user profile
   const checkAuthenticationStatus = async () => {
-    console.log('🔍 Checking authentication status...');
     try {
       const user = AuthService.getCurrentUser();
-      console.log('👤 Current user:', user ? `${user.uid} (${user.email})` : 'null');
       setCurrentUser(user);
       setIsUserLoggedIn(!!user);
 
       if (user) {
         setIsLoadingUserProfile(true);
-        console.log('👤 Loading user profile for:', user.uid);
-        
         try {
           const profileResult = await UserService.getCurrentUserProfile();
-          console.log('👤 Profile result:', profileResult);
           if (profileResult.success && profileResult.data) {
             setUserProfile(profileResult.data);
-            console.log('👤 User profile loaded successfully:', {
-              firstName: profileResult.data.firstName,
-              lastName: profileResult.data.lastName,
-              email: profileResult.data.email,
-              barangay: profileResult.data.barangay
-            });
           } else {
-            console.warn('⚠️ Failed to load user profile:', profileResult.error);
             setUserProfile(null);
           }
         } catch (profileError) {
-          console.error('❌ Error loading user profile:', profileError);
           setUserProfile(null);
         } finally {
           setIsLoadingUserProfile(false);
         }
       } else {
-        console.log('👤 No user logged in - guest mode');
         setUserProfile(null);
       }
     } catch (error) {
-      console.error('❌ Error checking authentication status:', error);
       setIsUserLoggedIn(false);
       setCurrentUser(null);
       setUserProfile(null);
@@ -870,37 +915,24 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     const { onAuthStateChanged } = require('firebase/auth');
     
     const unsubscribe = onAuthStateChanged(auth, async (user: any) => {
-      console.log('🔄 Auth state changed:', user ? `${user.uid} (${user.email})` : 'null');
       setCurrentUser(user);
       setIsUserLoggedIn(!!user);
 
       if (user) {
         setIsLoadingUserProfile(true);
-        console.log('👤 Loading user profile for:', user.uid);
-        
         try {
           const profileResult = await UserService.getCurrentUserProfile();
-          console.log('👤 Profile result:', profileResult);
           if (profileResult.success && profileResult.data) {
             setUserProfile(profileResult.data);
-            console.log('👤 User profile loaded successfully:', {
-              firstName: profileResult.data.firstName,
-              lastName: profileResult.data.lastName,
-              email: profileResult.data.email,
-              barangay: profileResult.data.barangay
-            });
           } else {
-            console.warn('⚠️ Failed to load user profile:', profileResult.error);
             setUserProfile(null);
           }
         } catch (profileError) {
-          console.error('❌ Error loading user profile:', profileError);
           setUserProfile(null);
         } finally {
           setIsLoadingUserProfile(false);
         }
       } else {
-        console.log('👤 No user logged in - guest mode');
         setUserProfile(null);
         setIsLoadingUserProfile(false);
       }
@@ -922,16 +954,13 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         
         // Listen for notifications received while app is in foreground
         notificationListener = NotificationService.addNotificationReceivedListener((notification) => {
-          console.log('🔔 Notification received:', notification);
         });
 
         // Listen for user tapping on notifications
         responseListener = NotificationService.addNotificationResponseListener((response) => {
-          console.log('🔔 Notification tapped:', response);
           const data = response.notification.request.content.data;
           
           if (data.type === 'verified-report' && data.reportId) {
-            console.log('📍 User tapped on report notification:', data.reportId);
             // Could navigate to report details or highlight on map
             Alert.alert(
               'View Report',
@@ -941,7 +970,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           }
         });
       } catch (error) {
-        console.error('Error setting up notification listeners:', error);
       }
     };
 
@@ -967,61 +995,42 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           const location = await locationService.getCurrentLocation();
           if (location) {
             setUserLocation(location);
-            console.log('✅ User location set successfully');
+            // Cache location for offline use
+            setLastKnownLocation({
+              latitude: location.latitude,
+              longitude: location.longitude,
+              timestamp: Date.now()
+            });
           } else {
-            console.warn('⚠️ Location could not be retrieved - services may be disabled');
           }
         } else {
-          console.warn('⚠️ Location permission not granted');
         }
       } catch (error: any) {
-        console.error('❌ Error initializing location:', error.message || error);
       }
     };
 
     initializeLocation();
     
     // Set up real-time listener for reports
-    console.log('🔄 Setting up real-time reports listener...');
-    let isFirstLoad = true; // Track first load to avoid showing notifications on initial mount
-    
     const unsubscribeReports = ReportsService.subscribeToReports(
       (allReports) => {
-        console.log(`📊 Received ${allReports.length} total reports from Firestore`);
-        
         // Filter to only show Verified AND non-sensitive reports within last 30 days
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        console.log(`📅 30 days ago cutoff date: ${thirtyDaysAgo.toISOString()}`);
-        
         const verifiedReports = allReports.filter(report => {
           // Debug each report
           const isVerified = report.status === 'Verified';
           const isNotSensitive = !report.isSensitive;
-          
-          console.log(`🔍 Report ${report.id}:`, {
-            title: report.title || 'NO TITLE',
-            status: report.status,
-            isVerified,
-            isSensitive: report.isSensitive,
-            isNotSensitive,
-            dateTime: report.dateTime,
-            barangay: report.barangay
-          });
-          
           if (!isVerified) {
-            console.log(`   ❌ Filtered out: Not verified (status: ${report.status})`);
             return false;
           }
           if (!isNotSensitive) {
-            console.log(`   ❌ Filtered out: Is sensitive`);
             return false;
           }
           
           // Check if report is within last 30 days
           try {
             if (!report.dateTime) {
-              console.log(`   ❌ Filtered out: No dateTime field`);
               return false;
             }
             
@@ -1029,33 +1038,24 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             const reportDate = new Date(report.dateTime);
             
             if (isNaN(reportDate.getTime())) {
-              console.log(`   ❌ Filtered out: Invalid date: ${report.dateTime}`);
               return false;
             }
             
             const isWithin30Days = reportDate >= thirtyDaysAgo;
             const daysDiff = Math.floor((new Date().getTime() - reportDate.getTime()) / (1000 * 60 * 60 * 24));
-            
-            console.log(`   📅 Date check: ${reportDate.toISOString()} (${daysDiff} days ago) - ${isWithin30Days ? '✅ PASS' : '❌ TOO OLD'}`);
-            
             return isWithin30Days;
           } catch (e) {
-            console.warn('   ⚠️ Error parsing date for report:', report.id, e);
             return false;
           }
         });
-        
-        console.log(`✅ Filtered to ${verifiedReports.length} reports that meet all criteria`);
-        
         // Update reports state
         setReports(verifiedReports);
         
         // On first load, just store the IDs without showing notifications
-        if (isFirstLoad) {
+        if (isFirstReportLoad.current) {
           const currentVerifiedIds = new Set(verifiedReports.map(r => r.id));
           setPreviousReportIds(currentVerifiedIds);
-          isFirstLoad = false;
-          console.log(`✅ Initial load: ${verifiedReports.length} verified reports`);
+          isFirstReportLoad.current = false;
         } else {
           // Detect newly verified reports for notifications (after first load)
           setPreviousReportIds(prevIds => {
@@ -1066,17 +1066,13 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             
             // Show notifications for newly verified reports
             if (newlyVerified.length > 0) {
-              console.log(`🔔 ${newlyVerified.length} new verified report(s) detected!`);
               setNewVerifiedReports(prev => [...prev, ...newlyVerified]);
             }
-            
-            console.log(`✅ Real-time update: ${verifiedReports.length} verified reports (${allReports.length} total)`);
             return currentVerifiedIds;
           });
         }
       },
       (error) => {
-        console.error('❌ Real-time reports error:', error);
         Alert.alert('Error', `Failed to load reports: ${error}`);
       }
     );
@@ -1085,17 +1081,146 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     
     // Cleanup listener on unmount
     return () => {
-      console.log('🔄 Cleaning up real-time reports listener...');
       unsubscribeReports();
     };
   }, [fontsLoaded]);
 
+  // Monitor network connectivity and sync offline reports when online
+  useEffect(() => {
+    if (!fontsLoaded) return;
+
+    // Subscribe to network state updates
+    const unsubscribe = NetInfo.addEventListener(state => {
+      const connected = state.isConnected ?? false;
+      setIsConnected(connected);
+
+      // Auto-sync when connection is restored
+      if (connected && !isSyncing) {
+        syncOfflineReports();
+      }
+    });
+
+    // Get initial connection state and pending reports count
+    NetInfo.fetch().then(state => {
+      setIsConnected(state.isConnected ?? false);
+    });
+
+    // Load pending reports count
+    OfflineReportsService.getOfflineReportsCount().then(count => {
+      setPendingReportsCount(count);
+    });
+
+    return () => unsubscribe();
+  }, [fontsLoaded]);
+
+  // Function to sync offline reports when connection is restored
+  const syncOfflineReports = async () => {
+    try {
+      const offlineReports = await OfflineReportsService.getOfflineReports();
+      
+      if (offlineReports.length === 0) {
+        setPendingReportsCount(0);
+        return;
+      }
+
+      setIsSyncing(true);
+      
+      let successCount = 0;
+      let failureCount = 0;
+
+      for (const report of offlineReports) {
+        try {
+          // Upload media if any
+          let mediaURL = report.mediaURL;
+          let mediaType = report.mediaType;
+
+          if (report.mediaAssets && report.mediaAssets.length > 0) {
+            const uploadPromises = report.mediaAssets.map(async (media: any) => {
+              return await uploadMediaToStorage(media, report.submittedByEmail);
+            });
+            
+            const downloadURLs = await Promise.all(uploadPromises);
+            const successfulUploads = downloadURLs.filter(url => url !== null);
+            
+            if (successfulUploads.length > 0) {
+              const types = report.mediaAssets.map((m: any) => m.type).join(', ');
+              mediaType = `${successfulUploads.length} files: ${types}`;
+              mediaURL = successfulUploads.join(';');
+            }
+          }
+
+          // Submit report with original timestamp
+          const reportData: CreateReportData = {
+            barangay: report.barangay,
+            title: report.title,
+            description: report.description,
+            incidentType: report.incidentType,
+            category: report.category,
+            isSensitive: report.isSensitive,
+            latitude: report.latitude,
+            longitude: report.longitude,
+            submittedByEmail: report.submittedByEmail,
+            mediaType,
+            mediaURL
+          };
+
+          const result = await ReportsService.createReport(reportData, report.createdAt);
+          
+          if (result.success) {
+            await OfflineReportsService.removeOfflineReport(report.id);
+            successCount++;
+          } else {
+            failureCount++;
+          }
+        } catch (error) {
+          failureCount++;
+        }
+      }
+
+      // Update pending count
+      const remainingCount = await OfflineReportsService.getOfflineReportsCount();
+      setPendingReportsCount(remainingCount);
+
+      // Show result to user
+      if (successCount > 0 || failureCount > 0) {
+        Alert.alert(
+          'Sync Complete',
+          `Successfully uploaded ${successCount} offline report${successCount !== 1 ? 's' : ''}${failureCount > 0 ? `. ${failureCount} failed.` : ''}`,
+          [{ text: 'OK' }]
+        );
+        
+        // Refresh reports if any succeeded
+        if (successCount > 0) {
+          fetchHotspots();
+        }
+      }
+    } catch (error) {
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleReportPress = async () => {
-    const locationPermission = await LocationService.getInstance().requestLocationPermission();
+    const locationService = LocationService.getInstance();
+    const locationPermission = await locationService.requestLocationPermission();
     
     if (!locationPermission.granted) {
       setIsLocationPermissionModalVisible(true);
       return;
+    }
+
+    // Try to get and cache current location when opening report modal
+    try {
+      const location = await locationService.getCurrentLocation();
+      if (location) {
+        setLastKnownLocation({
+          latitude: location.latitude,
+          longitude: location.longitude,
+          timestamp: Date.now()
+        });
+      }
+    } catch (error) {
+      // Silently fail - we'll use fallback when submitting
     }
 
     const currentUser = AuthService.getCurrentUser();
@@ -1121,15 +1246,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       const timestamp = Date.now();
       const sanitizedEmail = userEmail.replace(/[^a-zA-Z0-9]/g, '_');
       const fileName = `${fileType}s/${sanitizedEmail}/${timestamp}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
-      
-      console.log('📤 Uploading file to Firebase Storage:', fileName);
-      
       // Fetch the file as a blob directly from the URI
       const response = await fetch(fileUri);
       const blob = await response.blob();
-      
-      console.log('📦 Blob created, size:', blob.size, 'bytes');
-      
       // Create storage reference
       const storageReference = storageRef(storage, `reports/${fileName}`);
       
@@ -1142,14 +1261,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           'state_changed',
           (snapshot) => {
             const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log(`📊 Upload progress: ${progress.toFixed(0)}%`);
           },
           (error) => {
-            console.error('❌ Upload error:', error);
             reject(error);
           },
           () => {
-            console.log('✅ Upload completed');
             resolve(uploadTask.snapshot);
           }
         );
@@ -1157,11 +1273,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       
       // Get download URL
       const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-      console.log('✅ File uploaded successfully:', downloadURL);
-      
       return downloadURL;
     } catch (error: any) {
-      console.error('❌ Error uploading media:', error);
       throw error;
     }
   };
@@ -1178,7 +1291,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     const isAdminUser = currentUser.email === 'emmnlisaac@gmail.com';
     
     if (isAdminUser) {
-      console.log('🔓 ADMIN USER DETECTED - Bypassing all location restrictions for:', currentUser.email);
     }
 
     // Check user's barangay eligibility (SKIP for admin user)
@@ -1212,7 +1324,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       }
 
       // Get current location to check if user is within barangay vicinity
-      console.log('📍 Getting current location to verify barangay vicinity...');
       const currentLocation = await locationService.getCurrentLocation();
       
       if (!currentLocation) {
@@ -1241,14 +1352,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           );
           return;
         }
-        
-        console.log('✅ User is within barangay vicinity - proceeding with report submission');
       } else {
-        console.log('🔓 ADMIN USER - Skipping vicinity verification, can report from anywhere');
       }
       
     } catch (error) {
-      console.error('Error checking user eligibility:', error);
       Alert.alert('Error', 'Unable to verify your eligibility. Please try again.');
       return;
     }
@@ -1271,19 +1378,85 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     setIsSubmittingReport(true);
 
     try {
-      // Get current location (we already verified it exists during vicinity check)
-      console.log('📍 Getting current location for report submission...');
+      // Get current location with fallback to cached location
       const locationService = LocationService.getInstance();
-      const currentLocation = await locationService.getCurrentLocation();
+      let currentLocation = await locationService.getCurrentLocation();
 
+      // Cache fresh location if available
+      if (currentLocation) {
+        setLastKnownLocation({
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude,
+          timestamp: Date.now()
+        });
+      }
+
+      // Fallback 1: Use cached location if GPS unavailable
+      if (!currentLocation && lastKnownLocation) {
+        const ageMinutes = Math.floor((Date.now() - lastKnownLocation.timestamp) / 60000);
+        const userConfirmed = await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'Using Approximate Location',
+            `GPS is currently unavailable. Use your location from ${ageMinutes} minute(s) ago?\n\nThis will be used as the incident location.`,
+            [
+              { text: 'Cancel', onPress: () => resolve(false) },
+              { text: 'Continue', onPress: () => resolve(true) }
+            ]
+          );
+        });
+
+        if (!userConfirmed) {
+          setIsSubmittingReport(false);
+          return;
+        }
+
+        currentLocation = {
+          latitude: lastKnownLocation.latitude,
+          longitude: lastKnownLocation.longitude
+        };
+      }
+
+      // Fallback 2: Use barangay center if no cached location
       if (!currentLocation) {
-        // Alert is already shown by LocationService
+        const userProfileResult = await UserService.getCurrentUserProfile();
+        if (userProfileResult.success && userProfileResult.data) {
+          const { BARANGAY_COORDINATES } = await import('../utils/BulacanBarangays');
+          const barangayData = BARANGAY_COORDINATES[userProfileResult.data.barangay];
+          
+          if (barangayData) {
+            const userConfirmed = await new Promise<boolean>((resolve) => {
+              Alert.alert(
+                'Using Barangay Center',
+                `GPS is unavailable and no cached location found. Use your barangay center (${userProfileResult.data.barangay}) as the incident location?\n\nThis is an approximate location.`,
+                [
+                  { text: 'Cancel', onPress: () => resolve(false) },
+                  { text: 'Continue', onPress: () => resolve(true) }
+                ]
+              );
+            });
+
+            if (!userConfirmed) {
+              setIsSubmittingReport(false);
+              return;
+            }
+
+            currentLocation = {
+              latitude: barangayData.latitude,
+              longitude: barangayData.longitude
+            };
+          }
+        }
+      }
+
+      // Final check: if still no location, cannot submit
+      if (!currentLocation) {
+        Alert.alert(
+          'Location Required',
+          'Unable to determine your location. Please enable GPS and try again.'
+        );
         setIsSubmittingReport(false);
         return;
       }
-
-      console.log('📍 Current location confirmed for report:', currentLocation);
-
       // Get user's actual barangay from profile
       const userProfileResult = await UserService.getCurrentUserProfile();
       const userBarangay = userProfileResult.success && userProfileResult.data 
@@ -1302,21 +1475,46 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         longitude: currentLocation.longitude,
         submittedByEmail: currentUser.email || 'unknown@email.com'
       };
-      
-      console.log('📋 Report data prepared:', {
-        barangay: reportData.barangay,
-        category: reportData.category,
-        incidentType: reportData.incidentType,
-        location: `${reportData.latitude}, ${reportData.longitude}`
-      });
+
+      // Check if device is offline - save locally if so
+      if (!isConnected) {
+        const offlineReport = {
+          id: OfflineReportsService.generateLocalId(),
+          ...reportData,
+          createdAt: new Date().toISOString(),
+          mediaAssets: selectedMedia.length > 0 ? selectedMedia : undefined
+        };
+
+        await OfflineReportsService.saveOfflineReport(offlineReport);
+        
+        // Update pending count
+        const count = await OfflineReportsService.getOfflineReportsCount();
+        setPendingReportsCount(count);
+
+        // Stop loading immediately - offline save is instant
+        setIsSubmittingReport(false);
+
+        // Close modal and clear form
+        setIsReportModalVisible(false);
+        setReportTitle('');
+        setReportType('');
+        setReportDescription('');
+        setReportCategory('Select type of incident');
+        setIsSensitive(false);
+        setSelectedMedia([]);
+
+        Alert.alert(
+          'Report Saved Offline',
+          'Your report has been saved and will be submitted automatically when you have internet connection.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
 
       // Upload media to Firebase Storage if any media is selected
       if (selectedMedia.length > 0) {
-        console.log(`📤 Uploading ${selectedMedia.length} media files to Firebase Storage...`);
-        
         try {
           const uploadPromises = selectedMedia.map(async (media, index) => {
-            console.log(`📤 Uploading file ${index + 1}/${selectedMedia.length}...`);
             const downloadURL = await uploadMediaToStorage(media, currentUser.email || 'unknown');
             return downloadURL;
           });
@@ -1331,19 +1529,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           }
           
           if (successfulUploads.length < downloadURLs.length) {
-            console.warn(`⚠️ ${downloadURLs.length - successfulUploads.length} uploads failed`);
           }
           
           const mediaTypes = selectedMedia.map(media => media.type).join(', ');
           reportData.mediaType = `${successfulUploads.length} files: ${mediaTypes}`;
           reportData.mediaURL = successfulUploads.join(';');
-          
-          console.log('✅ All media uploaded successfully:', {
-            count: successfulUploads.length,
-            urls: successfulUploads
-          });
         } catch (uploadError: any) {
-          console.error('❌ Error uploading media:', uploadError);
           setIsSubmittingReport(false);
           Alert.alert(
             'Upload Error',
@@ -1353,21 +1544,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           return; // Exit early on upload error
         }
       }
-
-      console.log('📍 Report will be submitted with location:', {
-        latitude: currentLocation.latitude,
-        longitude: currentLocation.longitude,
-        barangay: reportData.barangay
-      });
-
-      console.log('📝 Submitting report to Firestore:', reportData);
-
       // Submit to Firestore
       const result = await ReportsService.createReport(reportData);
 
       if (result.success) {
-        console.log('✅ Report submitted successfully with ID:', result.reportId);
-        
         // Close modal and clear form
         setIsReportModalVisible(false);
         setReportTitle('');
@@ -1381,11 +1561,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         // Just refresh hotspots without showing success modal
         fetchHotspots();
       } else {
-        console.error('❌ Failed to submit report:', result.error);
         Alert.alert('Error', `Failed to submit report: ${result.error}`);
       }
     } catch (error: any) {
-      console.error('❌ Exception while submitting report:', error);
       Alert.alert('Error', `Failed to submit report: ${error.message}`);
     } finally {
       setIsSubmittingReport(false);
@@ -1399,7 +1577,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       setCameraPermissionGranted(status === 'granted');
       return status === 'granted';
     } catch (error) {
-      console.error('Error requesting camera permission:', error);
       return false;
     }
   };
@@ -1409,7 +1586,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       return status === 'granted';
     } catch (error) {
-      console.error('Error requesting media library permission:', error);
       return false;
     }
   };
@@ -1421,6 +1597,18 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       [
         { text: 'Camera', onPress: () => openCamera() },
         { text: 'Gallery', onPress: () => openGallery() },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const openPhotoOptions = () => {
+    Alert.alert(
+      'Add Photo',
+      'Choose how you want to add a photo',
+      [
+        { text: 'Camera', onPress: () => openCamera() },
+        { text: 'Gallery', onPress: () => openPhotoGallery() },
         { text: 'Cancel', style: 'cancel' }
       ]
     );
@@ -1464,15 +1652,58 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             }
           }
         } catch (sizeError) {
-          console.warn('Could not check file size:', sizeError);
         }
         
         setSelectedMedia(prevMedia => [...prevMedia, ...result.assets]);
-        console.log('📷 Photo captured from camera:', result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error opening camera:', error);
       Alert.alert('Error', 'Failed to open camera');
+    }
+  };
+
+  const openPhotoGallery = async () => {
+    const hasPermission = await requestMediaLibraryPermission();
+    if (!hasPermission) {
+      Alert.alert('Permission Denied', 'Gallery access is required to select photos');
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+        allowsMultipleSelection: false,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Check if adding this would exceed the limit
+        if (selectedMedia.length >= 5) {
+          Alert.alert('Limit Exceeded', 'You can only select up to 5 media files.');
+          return;
+        }
+        
+        // Check file size (10MB limit for images)
+        const asset = result.assets[0];
+        try {
+          const fileInfo = await FileSystem.getInfoAsync(asset.uri);
+          if (fileInfo.exists && fileInfo.size) {
+            const fileSizeMB = fileInfo.size / (1024 * 1024);
+            if (fileSizeMB > 10) {
+              Alert.alert(
+                'File Too Large',
+                `Image size is ${fileSizeMB.toFixed(1)}MB. Maximum allowed size is 10MB.`
+              );
+              return;
+            }
+          }
+        } catch (sizeError) {
+        }
+        
+        setSelectedMedia(prevMedia => [...prevMedia, ...result.assets]);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to open photo gallery');
     }
   };
 
@@ -1513,14 +1744,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             }
           }
         } catch (sizeError) {
-          console.warn('Could not check file size:', sizeError);
         }
         
         setSelectedMedia(prevMedia => [...prevMedia, ...result.assets]);
-        console.log('🎥 Video selected from gallery:', result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error opening gallery:', error);
       Alert.alert('Error', 'Failed to open gallery');
     }
   };
@@ -1575,14 +1803,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             }
           }
         } catch (sizeError) {
-          console.warn('Could not check file size:', sizeError);
         }
         
         setSelectedMedia(prevMedia => [...prevMedia, ...result.assets]);
-        console.log('🎥 Video recorded from camera:', result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error recording video:', error);
       Alert.alert('Error', 'Failed to record video');
     }
   };
@@ -1631,7 +1856,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       // Show custom modal asking user if they want to enable notifications
       setIsNotificationModalVisible(true);
     } catch (error) {
-      console.error('Error handling notification press:', error);
       Alert.alert('Error', 'Unable to manage notification settings.');
     }
   };
@@ -1664,7 +1888,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         );
       }
     } catch (error) {
-      console.error('Error requesting notifications:', error);
       Alert.alert('Error', 'Unable to enable notifications. Please try again.');
     }
   };
@@ -1714,11 +1937,16 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       const location = await locationService.getCurrentLocation();
       if (location) {
         setUserLocation(location);
+        // Cache location for offline use
+        setLastKnownLocation({
+          latitude: location.latitude,
+          longitude: location.longitude,
+          timestamp: Date.now()
+        });
         // You could also update the map center here by sending a message to the WebView
       }
       // If location is null, alert is already shown by LocationService
     } catch (error) {
-      console.error('Error getting location:', error);
     }
   };
 
@@ -1930,6 +2158,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
                 </>
               )}
             </View>
+
+            {/* Offline/Syncing Status Badges */}
+            {!isConnected && pendingReportsCount > 0 && (
+              <View style={styles.offlineBadge}>
+                <Text style={styles.offlineBadgeText}>
+                  📴 OFFLINE MODE - {pendingReportsCount} report{pendingReportsCount !== 1 ? 's' : ''} pending upload
+                </Text>
+              </View>
+            )}
+
+            {isSyncing && (
+              <View style={styles.syncingBadge}>
+                <Text style={styles.syncingBadgeText}>
+                  🔄 SYNCING REPORTS...
+                </Text>
+              </View>
+            )}
 
             <View style={styles.menuSection}>
               {/* Report Incident - Always visible but behavior differs */}
@@ -2289,7 +2534,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
               <View style={styles.mediaButtons}>
                 <TouchableOpacity 
                   style={styles.mediaButton}
-                  onPress={() => openCamera()}
+                  onPress={() => openPhotoOptions()}
                 >
                   <View style={styles.mediaIcon}>
                     <FontAwesome name="camera" size={24} color="white" />
@@ -2385,24 +2630,25 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#EF4444',
-    paddingTop: responsiveSize(20, 25, 30),
-    paddingBottom: responsiveSize(20, 25, 30),
-    paddingHorizontal: responsivePadding(24),
+    paddingTop: getSafeAreaTop() + responsiveSize(10, 12, 14, 16, 18),
+    paddingBottom: responsiveSize(14, 16, 18, 20, 22),
+    paddingHorizontal: responsivePadding(16),
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   menuButton: {
-    width: responsiveSize(44, 52, 60),
-    height: responsiveSize(44, 52, 60),
+    width: minimumTouchTarget(responsiveSize(40, 44, 46, 48, 52)),
+    height: minimumTouchTarget(responsiveSize(40, 44, 46, 48, 52)),
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: responsiveSize(8, 10, 12),
+    borderRadius: responsiveSize(8, 8, 10, 10, 12),
   },
   headerTitle: {
     color: 'white',
     fontSize: responsiveFontSize(18),
     fontFamily: 'Poppins_700Bold',
+    letterSpacing: 0.3,
   },
   headerStatus: {
     alignItems: 'flex-end',
@@ -2430,7 +2676,7 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     position: 'absolute',
-    top: responsiveSize(90, 110, 130),
+    top: responsiveSize(90, 110, 120, 130, 136),
     left: responsivePadding(16),
     right: responsivePadding(16),
     zIndex: 20,
@@ -2439,9 +2685,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'white',
-    borderRadius: responsiveSize(24, 28, 32),
+    borderRadius: responsiveSize(24, 28, 30, 32, 33),
     paddingHorizontal: responsivePadding(25),
-    paddingVertical: responsiveSize(8, 12, 14),
+    paddingVertical: responsiveSize(8, 12, 13, 14, 14),
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -2453,7 +2699,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    marginLeft: responsiveSize(12, 16, 20),
+    marginLeft: responsiveSize(12, 16, 18, 20, 21),
     fontSize: responsiveFontSize(16),
     color: '#111827',
     fontFamily: 'Poppins_400Regular',
@@ -2465,13 +2711,13 @@ const styles = StyleSheet.create({
   fabContainer: {
     position: 'absolute',
     right: responsivePadding(16),
-    bottom: responsiveSize(140, 160, 180),
-    gap: responsiveSize(16, 20, 24),
+    bottom: responsiveSize(140, 160, 170, 180, 186),
+    gap: responsiveSize(16, 20, 22, 24, 25),
   },
   fab: {
-    width: responsiveSize(56, 64, 72),
-    height: responsiveSize(56, 64, 72),
-    borderRadius: responsiveSize(28, 32, 36),
+    width: responsiveSize(56, 64, 68, 72, 74),
+    height: responsiveSize(56, 64, 68, 72, 74),
+    borderRadius: responsiveSize(28, 32, 34, 36, 37),
     backgroundColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2493,19 +2739,19 @@ const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
     backgroundColor: '#EF4444',
-    paddingVertical: responsiveSize(20, 24, 28),
+    paddingVertical: responsiveSize(20, 24, 26, 28, 29),
     paddingHorizontal: responsivePadding(32),
     justifyContent: isTablet() ? 'center' : 'space-around',
-    gap: isTablet() ? responsiveSize(40, 60, 80) : 0,
+    gap: isTablet() ? responsiveSize(40, 60, 70, 80, 86) : 0,
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
   },
   navItem: {
-    padding: responsiveSize(16, 20, 24),
-    borderRadius: responsiveSize(12, 14, 16),
+    padding: responsiveSize(16, 20, 22, 24, 25),
+    borderRadius: responsiveSize(12, 14, 15, 16, 16),
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: responsiveSize(64, 80, 96),
+    minWidth: responsiveSize(64, 80, 88, 96, 100),
   },
   activeNavItem: {
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
@@ -2531,27 +2777,27 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: responsiveSize(280, 360, 400),
+    width: responsiveSize(280, 360, 380, 400, 412),
     backgroundColor: '#EF4444',
-    paddingTop: responsiveSize(60, 70, 80),
+    paddingTop: responsiveSize(60, 70, 75, 80, 83),
     paddingHorizontal: responsivePadding(20),
     zIndex: 1001,
   },
   profileContainer: {
     alignItems: 'center',
-    paddingVertical: responsiveSize(30, 35, 40),
+    paddingVertical: responsiveSize(30, 35, 37, 40, 41),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.2)',
-    marginBottom: responsiveSize(20, 25, 30),
+    marginBottom: responsiveSize(20, 25, 27, 30, 31),
   },
   profileImageContainer: {
-    width: responsiveSize(80, 100, 120),
-    height: responsiveSize(80, 100, 120),
-    borderRadius: responsiveSize(40, 50, 60),
+    width: responsiveSize(80, 100, 110, 120, 126),
+    height: responsiveSize(80, 100, 110, 120, 126),
+    borderRadius: responsiveSize(40, 50, 55, 60, 63),
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: responsiveSize(12, 16, 20),
+    marginBottom: responsiveSize(12, 16, 18, 20, 21),
   },
   profileImage: {
     width: 80,
@@ -2644,8 +2890,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuItem: {
-    paddingVertical: responsiveSize(16, 20, 24),
-    paddingHorizontal: responsiveSize(16, 20, 24),
+    paddingVertical: responsiveSize(16, 20, 22, 24, 25),
+    paddingHorizontal: responsiveSize(16, 20, 22, 24, 25),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
@@ -2662,11 +2908,11 @@ const styles = StyleSheet.create({
   },
   permissionModal: {
     backgroundColor: 'white',
-    borderRadius: responsiveSize(20, 24, 28),
+    borderRadius: responsiveSize(20, 24, 26, 28, 29),
     padding: responsivePadding(32),
     alignItems: 'center',
     width: '100%',
-    maxWidth: responsiveSize(340, 450, 500),
+    maxWidth: responsiveSize(340, 450, 475, 500, 515),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.25,
@@ -2744,10 +2990,10 @@ const styles = StyleSheet.create({
   },
   reportModal: {
     backgroundColor: 'white',
-    borderRadius: responsiveSize(20, 24, 28),
+    borderRadius: responsiveSize(20, 24, 26, 28, 29),
     height: isTablet() ? '80%' : '85%',
     width: isTablet() ? '90%' : '100%',
-    maxWidth: responsiveSize(400, 600, 700),
+    maxWidth: responsiveSize(400, 600, 650, 700, 730),
     paddingTop: responsivePadding(24),
     paddingHorizontal: responsivePadding(24),
     display: 'flex',
@@ -2787,9 +3033,9 @@ const styles = StyleSheet.create({
   reportInput: {
     borderWidth: 1,
     borderColor: '#D1D5DB',
-    borderRadius: responsiveSize(8, 10, 12),
-    paddingHorizontal: responsiveSize(16, 20, 24),
-    paddingVertical: responsiveSize(12, 14, 16),
+    borderRadius: responsiveSize(8, 10, 11, 12, 12),
+    paddingHorizontal: responsiveSize(16, 20, 22, 24, 25),
+    paddingVertical: responsiveSize(12, 14, 15, 16, 16),
     fontSize: responsiveFontSize(16),
     color: '#111827',
     backgroundColor: '#F9FAFB',
@@ -3010,7 +3256,7 @@ const styles = StyleSheet.create({
   // Notification Banner Styles
   notificationBanner: {
     position: 'absolute',
-    top: responsiveSize(70, 85, 100),
+    top: responsiveSize(70, 85, 92, 100, 104),
     left: responsivePadding(16),
     right: responsivePadding(16),
     zIndex: 9999,
@@ -3081,6 +3327,36 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
+  },
+  offlineBadge: {
+    backgroundColor: '#F59E0B',
+    marginHorizontal: 20,
+    marginVertical: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  offlineBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
+    textAlign: 'center',
+  },
+  syncingBadge: {
+    backgroundColor: '#3B82F6',
+    marginHorizontal: 20,
+    marginVertical: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  syncingBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
+    textAlign: 'center',
   },
 });
 

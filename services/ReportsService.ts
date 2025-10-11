@@ -337,9 +337,12 @@ export class ReportsService {
   /**
    * Create a new report
    */
-  static async createReport(reportData: CreateReportData): Promise<{ success: boolean; reportId?: string; error?: string }> {
+  static async createReport(reportData: CreateReportData, customTimestamp?: string): Promise<{ success: boolean; reportId?: string; error?: string }> {
     try {
       console.log('🔄 Creating report in Firestore with data:', reportData);
+      
+      // Use custom timestamp if provided (for offline reports), otherwise use current time
+      const dateTime = customTimestamp || new Date().toISOString();
       
       const newReport = {
         Barangay: reportData.barangay,
@@ -353,11 +356,11 @@ export class ReportsService {
         Longitude: reportData.longitude,
         SubmittedByEmail: reportData.submittedByEmail,
         Status: 'Pending',
-        DateTime: new Date().toISOString(),
+        DateTime: dateTime,
         MediaType: reportData.mediaType || null,
         MediaURL: reportData.mediaURL || null,
         hasMedia: reportData.mediaURL ? true : false,
-        createdAt: Timestamp.now()
+        createdAt: customTimestamp ? Timestamp.fromDate(new Date(customTimestamp)) : Timestamp.now()
       };
       
       console.log('📝 Attempting to add document to Firestore reports collection...');
