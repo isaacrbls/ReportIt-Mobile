@@ -14,7 +14,7 @@ import {
   Modal,
   Image,
 } from 'react-native';
-import FontAwesome from '@react-native-vector-icons/fontawesome';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useNavigation } from '@react-navigation/native';
 import { ReportsService, Report } from '../services/ReportsService';
 import { useAuth } from '../services/AuthContext';
