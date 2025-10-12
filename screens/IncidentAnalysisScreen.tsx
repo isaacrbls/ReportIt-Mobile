@@ -439,7 +439,7 @@ const IncidentAnalysisScreen: React.FC<IncidentAnalysisScreenProps> = ({ navigat
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Theft Trend analysis</Text>
           <Text style={styles.sectionSubtitle}>
-            View incident patterns and predictions based on{'\n'}ML anaylysis
+            View incident patterns and predictions based on data analysis
           </Text>
 
           <View style={styles.chartCard}>
@@ -468,7 +468,6 @@ const IncidentAnalysisScreen: React.FC<IncidentAnalysisScreenProps> = ({ navigat
           <View style={styles.riskCard}>
             <View style={styles.riskHeader}>
               <Text style={styles.riskTitle}>Risk Prediction</Text>
-              <Text style={styles.riskSubtitle}>ML-based forecast</Text>
             </View>
 
             <View style={styles.riskList}>

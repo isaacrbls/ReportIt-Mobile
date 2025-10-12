@@ -604,31 +604,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   
   const slideAnim = useRef(new Animated.Value(-280)).current;
 
-  // Instantaneous search with debounce - triggers as user types
-  useEffect(() => {
-    // Clear previous timeout
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    // If search query is empty, clear results
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    // Debounce search by 300ms
-    searchTimeoutRef.current = setTimeout(() => {
-      handleSearch();
-    }, 300);
-
-    // Cleanup on unmount
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, [searchQuery, reports]);
+  // Search is now triggered only on Enter key press (onSubmitEditing)
+  // No auto-search on every keystroke for better performance
 
   // Search handler - searches reports by location, incident type, or description
   const handleSearch = async () => {
@@ -1200,29 +1177,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     }
   };
 
-  const handleReportPress = async () => {
-    const locationService = LocationService.getInstance();
-    const locationPermission = await locationService.requestLocationPermission();
-    
-    if (!locationPermission.granted) {
-      setIsLocationPermissionModalVisible(true);
-      return;
-    }
-
-    // Try to get and cache current location when opening report modal
-    try {
-      const location = await locationService.getCurrentLocation();
-      if (location) {
-        setLastKnownLocation({
-          latitude: location.latitude,
-          longitude: location.longitude,
-          timestamp: Date.now()
-        });
-      }
-    } catch (error) {
-      // Silently fail - we'll use fallback when submitting
-    }
-
+  const handleReportPress = () => {
+    // Quick auth check only - no async operations
     const currentUser = AuthService.getCurrentUser();
     
     if (!currentUser) {
@@ -1230,41 +1186,28 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       return;
     }
 
-    // Check if user is suspended before opening report modal
-    try {
-      const userProfileResult = await UserService.getCurrentUserProfile();
-      if (userProfileResult.success && userProfileResult.data) {
-        const userProfile = userProfileResult.data;
-        
-        if (userProfile.suspended) {
-          const suspensionEndDate = userProfile.suspensionEndDate 
-            ? new Date(userProfile.suspensionEndDate).toLocaleDateString('en-US', { 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-              })
-            : 'indefinitely';
-          
-          const suspensionReason = userProfile.suspensionReason || 'Violation of community guidelines';
-          
-          Alert.alert(
-            '🚫 Account Suspended',
-            `Your account has been suspended and you cannot submit reports.\n\n` +
-            `Reason: ${suspensionReason}\n\n` +
-            `Suspension until: ${suspensionEndDate}\n\n` +
-            `If you believe this is an error, please contact support.`,
-            [{ text: 'OK', style: 'default' }]
-          );
-          return;
-        }
-      }
-    } catch (error) {
-      // If we can't check suspension status, allow them to proceed
-      // The check will happen again during submission
-      console.warn('Failed to check suspension status:', error);
-    }
-
+    // Open modal immediately for instant response
     setIsReportModalVisible(true);
+
+    // Do background checks and location caching asynchronously
+    // These will be checked again during submission anyway
+    (async () => {
+      try {
+        const locationService = LocationService.getInstance();
+        
+        // Cache location in background if available
+        const location = await locationService.getCurrentLocation();
+        if (location) {
+          setLastKnownLocation({
+            latitude: location.latitude,
+            longitude: location.longitude,
+            timestamp: Date.now()
+          });
+        }
+      } catch (error) {
+        // Silently fail - location will be checked on submit
+      }
+    })();
   };
 
   // Upload media to Firebase Storage
@@ -2010,6 +1953,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   // Handle location button press (crosshair button)
   const handleLocationPress = async () => {
     try {
+      // Refresh hotspots first
+      fetchHotspots();
+      
+      // Then get and update location
       const locationService = LocationService.getInstance();
       const location = await locationService.getCurrentLocation();
       if (location) {
@@ -2088,10 +2035,22 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           <TextInput
             style={styles.searchInput}
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={(text) => {
+              setSearchQuery(text);
+              // Clear results when text is cleared
+              if (!text.trim()) {
+                setSearchResults([]);
+              }
+            }}
+            onSubmitEditing={() => {
+              // Trigger search only when Enter is pressed
+              if (searchQuery.trim()) {
+                handleSearch();
+              }
+            }}
             placeholder="Search incident type..."
             placeholderTextColor="#9CA3AF"
-            returnKeyType="done"
+            returnKeyType="search"
           />
           {searchQuery.length > 0 && (
             <>
@@ -2123,20 +2082,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
 
       <View style={styles.fabContainer}>
         <TouchableOpacity 
-          style={[styles.fab, isLoadingHotspots && styles.fabDisabled]} 
-          onPress={() => {
-            // Real-time reports updates are automatic, only refresh hotspots manually
-            fetchHotspots();
-          }}
-          disabled={isLoadingHotspots}
+          style={styles.fab} 
+          onPress={handleLocationPress}
         >
-          <FontAwesome 
-            name={isLoadingHotspots ? "spinner" : "refresh"} 
-            size={18} 
-            color={isLoadingHotspots ? "#9CA3AF" : "#6B7280"} 
-          />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.fab} onPress={handleLocationPress}>
           <FontAwesome name="crosshairs" size={22} color="#6B7280" />
         </TouchableOpacity>
         <TouchableOpacity style={[styles.fab, styles.fabDanger]} onPress={handleReportPress}>
@@ -2528,7 +2476,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
                 style={styles.reportInput}
                 value={reportTitle}
                 onChangeText={setReportTitle}
-                placeholder="Enter incident title (e.g., 'Motorcycle Theft on Main St.')"
+                placeholder="Enter incident title"
                 placeholderTextColor="#9CA3AF"
                 maxLength={100}
               />
