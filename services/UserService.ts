@@ -2,6 +2,9 @@ import { ref, set, get, update, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { database, storage, auth } from '../config/firebase';
 import { User } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const CACHED_USER_PROFILE_KEY = '@reportit_cached_user_profile';
 
 export interface UserProfile {
   uid: string;
@@ -116,7 +119,47 @@ export class UserService {
   }
 
   /**
-   * Get user profile from Realtime Database
+   * Cache user profile locally for offline access
+   */
+  static async cacheUserProfile(profile: UserProfile): Promise<void> {
+    try {
+      await AsyncStorage.setItem(CACHED_USER_PROFILE_KEY, JSON.stringify(profile));
+      console.log('✅ User profile cached locally');
+    } catch (error: any) {
+      console.error('❌ Error caching user profile:', error);
+    }
+  }
+
+  /**
+   * Get cached user profile (for offline use)
+   */
+  static async getCachedUserProfile(): Promise<UserProfile | null> {
+    try {
+      const cachedData = await AsyncStorage.getItem(CACHED_USER_PROFILE_KEY);
+      if (cachedData) {
+        return JSON.parse(cachedData) as UserProfile;
+      }
+      return null;
+    } catch (error: any) {
+      console.error('❌ Error getting cached user profile:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Clear cached user profile
+   */
+  static async clearCachedUserProfile(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(CACHED_USER_PROFILE_KEY);
+      console.log('✅ Cached user profile cleared');
+    } catch (error: any) {
+      console.error('❌ Error clearing cached user profile:', error);
+    }
+  }
+
+  /**
+   * Get user profile from Realtime Database (with caching)
    */
   static async getUserProfile(uid: string): Promise<UserServiceResult> {
     try {
@@ -124,9 +167,12 @@ export class UserService {
       const snapshot = await get(userRef);
       
       if (snapshot.exists()) {
+        const profile = snapshot.val();
+        // Cache the profile for offline use
+        await this.cacheUserProfile(profile);
         return {
           success: true,
-          data: snapshot.val()
+          data: profile
         };
       } else {
         return {
@@ -135,6 +181,16 @@ export class UserService {
         };
       }
     } catch (error: any) {
+      // Try to return cached profile if online fetch fails
+      console.log('⚠️ Failed to fetch profile online, checking cache...');
+      const cachedProfile = await this.getCachedUserProfile();
+      if (cachedProfile && cachedProfile.uid === uid) {
+        console.log('✅ Using cached profile');
+        return {
+          success: true,
+          data: cachedProfile
+        };
+      }
       return {
         success: false,
         error: error.message || 'Failed to get user profile'
@@ -375,7 +431,7 @@ export class UserService {
   }
 
   /**
-   * Get current user's profile data
+   * Get current user's profile data (with offline cache fallback)
    */
   static async getCurrentUserProfile(): Promise<UserServiceResult> {
     try {
@@ -405,6 +461,9 @@ export class UserService {
           uid: currentUser.uid
         };
         
+        // Cache the profile for offline use
+        await this.cacheUserProfile(completeProfile);
+        
         console.log('Successfully fetched user profile');
         return {
           success: true,
@@ -430,6 +489,21 @@ export class UserService {
       }
     } catch (error: any) {
       console.error('Error getting current user profile:', error);
+      
+      // Try to return cached profile if online fetch fails
+      console.log('⚠️ Failed to fetch profile online, checking cache...');
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const cachedProfile = await this.getCachedUserProfile();
+        if (cachedProfile && cachedProfile.uid === currentUser.uid) {
+          console.log('✅ Using cached profile for offline access');
+          return {
+            success: true,
+            data: cachedProfile
+          };
+        }
+      }
+      
       return {
         success: false,
         error: error.message || 'Failed to get user profile'

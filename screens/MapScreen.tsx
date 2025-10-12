@@ -14,7 +14,7 @@ import {
   ScrollView,
   BackHandler,
 } from 'react-native';
-import FontAwesome from '@react-native-vector-icons/fontawesome';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -597,8 +597,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     timestamp: number;
   } | null>(null);
   
-  // Network and offline state
-  const [isConnected, setIsConnected] = useState<boolean>(true);
+  // Network and offline state (initialize as null, will be determined by NetInfo)
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [pendingReportsCount, setPendingReportsCount] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   
@@ -1314,12 +1314,160 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   };
 
   const handleSubmitReport = async () => {
+    // ===== STEP 1: Basic validation =====
+    if (!reportTitle.trim()) {
+      Alert.alert('Error', 'Please enter a title for the incident');
+      return;
+    }
+
+    if (reportCategory === 'Select type of incident') {
+      Alert.alert('Error', 'Please select a category for the incident');
+      return;
+    }
+
+    if (!reportDescription.trim()) {
+      Alert.alert('Error', 'Please provide a description of the incident');
+      return;
+    }
+
     // Check if user is authenticated
     const currentUser = AuthService.getCurrentUser();
     if (!currentUser) {
       Alert.alert('Authentication Required', 'You must be logged in to submit a report');
       return;
     }
+
+    setIsSubmittingReport(true);
+
+    // ===== STEP 2: Check network connectivity FIRST =====
+    const networkState = await NetInfo.fetch();
+    const isOnline = networkState.isConnected ?? false;
+    
+    console.log('📡 Network check:', { 
+      isConnected: networkState.isConnected, 
+      isInternetReachable: networkState.isInternetReachable,
+      type: networkState.type,
+      finalDecision: isOnline ? 'ONLINE' : 'OFFLINE'
+    });
+
+    // ===== STEP 3: Handle OFFLINE submission (simplified path) =====
+    if (!isOnline) {
+      console.log('💾 Device is offline - saving report locally');
+      
+      try {
+        // Get cached user profile for offline validation
+        const cachedProfile = await UserService.getCachedUserProfile();
+        
+        if (!cachedProfile) {
+          Alert.alert(
+            'Profile Not Available',
+            'Unable to access your profile offline. Please connect to internet at least once before submitting offline reports.'
+          );
+          setIsSubmittingReport(false);
+          return;
+        }
+
+        // Check if user is suspended (from cache)
+        if (cachedProfile.suspended) {
+          Alert.alert(
+            'Account Suspended',
+            'Your account is suspended and you cannot submit reports.'
+          );
+          setIsSubmittingReport(false);
+          return;
+        }
+
+        // Get location (with fallbacks)
+        const locationService = LocationService.getInstance();
+        let currentLocation = await locationService.getCurrentLocation();
+
+        // Fallback 1: Use cached location
+        if (!currentLocation && lastKnownLocation) {
+          currentLocation = {
+            latitude: lastKnownLocation.latitude,
+            longitude: lastKnownLocation.longitude
+          };
+          console.log('📍 Using cached location for offline report');
+        }
+
+        // Fallback 2: Use barangay center
+        if (!currentLocation) {
+          const { BARANGAY_COORDINATES } = await import('../utils/BulacanBarangays');
+          const barangayData = BARANGAY_COORDINATES[cachedProfile.barangay];
+          
+          if (barangayData) {
+            currentLocation = {
+              latitude: barangayData.latitude,
+              longitude: barangayData.longitude
+            };
+            console.log('📍 Using barangay center for offline report');
+          }
+        }
+
+        // Final check
+        if (!currentLocation) {
+          Alert.alert(
+            'Location Required',
+            'Unable to determine your location. Please enable GPS and try again.'
+          );
+          setIsSubmittingReport(false);
+          return;
+        }
+
+        // Create offline report
+        const offlineReport = {
+          id: OfflineReportsService.generateLocalId(),
+          barangay: cachedProfile.barangay,
+          title: reportTitle.trim(),
+          description: reportDescription.trim(),
+          incidentType: reportCategory !== 'Select type of incident' ? reportCategory : 'Others',
+          category: reportCategory !== 'Select type of incident' ? reportCategory : 'Others',
+          isSensitive: isSensitive,
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude,
+          submittedByEmail: currentUser.email || 'unknown@email.com',
+          createdAt: new Date().toISOString(),
+          mediaAssets: selectedMedia.length > 0 ? selectedMedia : undefined
+        };
+
+        await OfflineReportsService.saveOfflineReport(offlineReport);
+        
+        // Update pending count
+        const count = await OfflineReportsService.getOfflineReportsCount();
+        setPendingReportsCount(count);
+
+        // Stop loading and clear form
+        setIsSubmittingReport(false);
+        setIsReportModalVisible(false);
+        setReportTitle('');
+        setReportType('');
+        setReportDescription('');
+        setReportCategory('Select type of incident');
+        setIsSensitive(false);
+        setSelectedMedia([]);
+
+        console.log('✅ Report saved offline successfully, showing alert now');
+        
+        // Use setTimeout to ensure modal closes before alert shows
+        setTimeout(() => {
+          Alert.alert(
+            'Report Saved Offline',
+            'Your report has been saved and will be submitted automatically when you have internet connection.',
+            [{ text: 'OK', onPress: () => console.log('User acknowledged offline save') }]
+          );
+        }, 300);
+        
+        return;
+      } catch (error: any) {
+        console.error('❌ Error saving offline report:', error);
+        Alert.alert('Error', 'Failed to save report offline. Please try again.');
+        setIsSubmittingReport(false);
+        return;
+      }
+    }
+
+    // ===== STEP 4: Handle ONLINE submission (full validation) =====
+    console.log('🌐 Device is online - submitting to server');
 
     // 🔓 SPECIAL ADMIN BYPASS: Only emmnlisaac@gmail.com can report from anywhere
     const isAdminUser = currentUser.email === 'emmnlisaac@gmail.com';
@@ -1332,6 +1480,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       const userProfileResult = await UserService.getCurrentUserProfile();
       if (!userProfileResult.success || !userProfileResult.data) {
         Alert.alert('Profile Error', 'Unable to load your profile. Please try again.');
+        setIsSubmittingReport(false);
         return;
       }
 
@@ -1355,6 +1504,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           `Suspension until: ${suspensionEndDate}\n\n` +
           [{ text: 'OK', style: 'default' }]
         );
+        setIsSubmittingReport(false);
         return;
       }
       
@@ -1364,6 +1514,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           'Reporting Not Available', 
           `Sorry, reporting is currently only available for residents of Pinagbakahan, Look, Bulihan, Dakila, and Mojon barangays. Your registered barangay: ${userProfile.barangay}`
         );
+        setIsSubmittingReport(false);
         return;
       }
 
@@ -1409,35 +1560,13 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         }
       } else {
       }
-      
-    } catch (error) {
-      Alert.alert('Error', 'Unable to verify your eligibility. Please try again.');
-      return;
-    }
 
-    if (!reportTitle.trim()) {
-      Alert.alert('Error', 'Please enter a title for the incident');
-      return;
-    }
+      // At this point, user is verified and online - get location and submit to Firebase
+      // Get user's barangay from the already-fetched profile
+      const userBarangay = userProfile.barangay || 'Pinagbakahan';
 
-    if (reportCategory === 'Select type of incident') {
-      Alert.alert('Error', 'Please select a category for the incident');
-      return;
-    }
-
-    if (!reportDescription.trim()) {
-      Alert.alert('Error', 'Please provide a description of the incident');
-      return;
-    }
-
-    setIsSubmittingReport(true);
-
-    try {
-      // Get current location with fallback to cached location
-      const locationService = LocationService.getInstance();
-      let currentLocation = await locationService.getCurrentLocation();
-
-      // Cache fresh location if available
+      // currentLocation was already fetched in the vicinity check above
+      // Cache it if available
       if (currentLocation) {
         setLastKnownLocation({
           latitude: currentLocation.latitude,
@@ -1446,79 +1575,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         });
       }
 
-      // Fallback 1: Use cached location if GPS unavailable
-      if (!currentLocation && lastKnownLocation) {
-        const ageMinutes = Math.floor((Date.now() - lastKnownLocation.timestamp) / 60000);
-        const userConfirmed = await new Promise<boolean>((resolve) => {
-          Alert.alert(
-            'Using Approximate Location',
-            `GPS is currently unavailable. Use your location from ${ageMinutes} minute(s) ago?\n\nThis will be used as the incident location.`,
-            [
-              { text: 'Cancel', onPress: () => resolve(false) },
-              { text: 'Continue', onPress: () => resolve(true) }
-            ]
-          );
-        });
-
-        if (!userConfirmed) {
-          setIsSubmittingReport(false);
-          return;
-        }
-
-        currentLocation = {
-          latitude: lastKnownLocation.latitude,
-          longitude: lastKnownLocation.longitude
-        };
-      }
-
-      // Fallback 2: Use barangay center if no cached location
-      if (!currentLocation) {
-        const userProfileResult = await UserService.getCurrentUserProfile();
-        if (userProfileResult.success && userProfileResult.data) {
-          const { BARANGAY_COORDINATES } = await import('../utils/BulacanBarangays');
-          const barangayData = BARANGAY_COORDINATES[userProfileResult.data.barangay];
-          
-          if (barangayData) {
-            const userConfirmed = await new Promise<boolean>((resolve) => {
-              Alert.alert(
-                'Using Barangay Center',
-                `GPS is unavailable and no cached location found. Use your barangay center (${userProfileResult.data.barangay}) as the incident location?\n\nThis is an approximate location.`,
-                [
-                  { text: 'Cancel', onPress: () => resolve(false) },
-                  { text: 'Continue', onPress: () => resolve(true) }
-                ]
-              );
-            });
-
-            if (!userConfirmed) {
-              setIsSubmittingReport(false);
-              return;
-            }
-
-            currentLocation = {
-              latitude: barangayData.latitude,
-              longitude: barangayData.longitude
-            };
-          }
-        }
-      }
-
-      // Final check: if still no location, cannot submit
-      if (!currentLocation) {
-        Alert.alert(
-          'Location Required',
-          'Unable to determine your location. Please enable GPS and try again.'
-        );
-        setIsSubmittingReport(false);
-        return;
-      }
-      // Get user's actual barangay from profile
-      const userProfileResult = await UserService.getCurrentUserProfile();
-      const userBarangay = userProfileResult.success && userProfileResult.data 
-        ? userProfileResult.data.barangay 
-        : 'Pinagbakahan'; // Fallback to default
-
-      // Prepare report data with current location
+      // Prepare report data
       const reportData: CreateReportData = {
         barangay: userBarangay,
         title: reportTitle.trim(),
@@ -1530,41 +1587,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         longitude: currentLocation.longitude,
         submittedByEmail: currentUser.email || 'unknown@email.com'
       };
-
-      // Check if device is offline - save locally if so
-      if (!isConnected) {
-        const offlineReport = {
-          id: OfflineReportsService.generateLocalId(),
-          ...reportData,
-          createdAt: new Date().toISOString(),
-          mediaAssets: selectedMedia.length > 0 ? selectedMedia : undefined
-        };
-
-        await OfflineReportsService.saveOfflineReport(offlineReport);
-        
-        // Update pending count
-        const count = await OfflineReportsService.getOfflineReportsCount();
-        setPendingReportsCount(count);
-
-        // Stop loading immediately - offline save is instant
-        setIsSubmittingReport(false);
-
-        // Close modal and clear form
-        setIsReportModalVisible(false);
-        setReportTitle('');
-        setReportType('');
-        setReportDescription('');
-        setReportCategory('Select type of incident');
-        setIsSensitive(false);
-        setSelectedMedia([]);
-
-        Alert.alert(
-          'Report Saved Offline',
-          'Your report has been saved and will be submitted automatically when you have internet connection.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
 
       // Upload media to Firebase Storage if any media is selected
       if (selectedMedia.length > 0) {
@@ -2446,10 +2468,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
               {/* Yes (Confirm Logout) */}
               <TouchableOpacity 
                 style={styles.allowButton}
-                onPress={() => {
+                onPress={async () => {
                   setIsLogoutModalVisible(false);
-                  // Sign out user
-                  AuthService.signOut();
+                  // Sign out user and clear cached profile
+                  await AuthService.signOut();
+                  await UserService.clearCachedUserProfile();
                   setIsUserLoggedIn(false);
                   setCurrentUser(null);
                   setUserProfile(null);
