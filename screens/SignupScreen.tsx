@@ -160,7 +160,13 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
         return true; // Prevent default back behavior
       }
       
-      // Priority 3: Use logical navigation
+      // Priority 3: If accessed from hamburger menu, go back to Map
+      if (route?.params?.fromMenu) {
+        navigation.navigate('Map');
+        return true;
+      }
+      
+      // Priority 4: Use logical navigation for normal signup flow
       const context = NavigationHelper.createContext('Signup', route?.params?.fromTerms ? 'TermsAndConditions' : undefined);
       const handled = NavigationHelper.handleBackNavigation(navigation, 'Signup', context);
       
@@ -364,7 +370,16 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            // If accessed from hamburger menu, go back to Map
+            if (route?.params?.fromMenu) {
+              navigation.navigate('Map');
+            } else {
+              // Otherwise use normal navigation flow
+              const context = NavigationHelper.createContext('Signup', route?.params?.fromTerms ? 'TermsAndConditions' : undefined);
+              NavigationHelper.handleBackNavigation(navigation, 'Signup', context);
+            }
+          }}
         >
           <FontAwesome name="arrow-left" size={20} color="white" />
         </TouchableOpacity>

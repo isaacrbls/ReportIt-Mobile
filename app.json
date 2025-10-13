@@ -17,7 +17,8 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "ReportIt needs access to your location to show nearby incident reports and help you report incidents at your current location.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "ReportIt needs access to your location to show nearby incident reports and help you report incidents at your current location.",
-        "NSUserNotificationsUsageDescription": "ReportIt needs permission to send you notifications about verified incident reports in your area to help keep you informed and safe."
+        "NSUserNotificationsUsageDescription": "ReportIt needs permission to send you notifications about verified incident reports in your area to help keep you informed and safe.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.reportit.mobile"
     },

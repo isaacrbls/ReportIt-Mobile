@@ -51,8 +51,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
     Poppins_700Bold,
   });
 
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const [slideAnim] = useState(new Animated.Value(50));
+  const [slideAnim] = useState(new Animated.Value(100));
 
 
   useEffect(() => {
@@ -69,19 +68,12 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
     checkLocationServices();
 
 
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [fontsLoaded, fadeAnim, slideAnim]);
+    Animated.timing(slideAnim, {
+      toValue: 0,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+  }, [fontsLoaded, slideAnim]);
 
   if (!fontsLoaded) {
     return null;
@@ -101,7 +93,6 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
           style={[
             styles.welcomeSection,
             {
-              opacity: fadeAnim,
               transform: [{ translateY: slideAnim }],
             },
           ]}
@@ -113,7 +104,14 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
           </Text>
         </Animated.View>
 
-        <View style={styles.cardsContainer}>
+        <Animated.View 
+          style={[
+            styles.cardsContainer,
+            {
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
           <View style={styles.card}>
             <View style={styles.cardContent}>
               <View style={styles.iconContainer}>
@@ -141,13 +139,12 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
               </Text>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         <Animated.View 
           style={[
             styles.buttonContainer,
             {
-              opacity: fadeAnim,
               transform: [{ translateY: slideAnim }],
             },
           ]}

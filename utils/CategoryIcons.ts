@@ -3,8 +3,6 @@
  * SVGs are loaded from the assets/report icons folder
  */
 
-// Import SVG files as strings using require
-// Note: In React Native/Expo, we need to use Asset system to load SVGs for WebView
 export const CATEGORY_ICON_FILES: { [key: string]: any } = {
   'Theft': require('../assets/report icons/theft.svg'),
   'Reports/Agreement': require('../assets/report icons/report⁄agreement.svg'),
@@ -21,7 +19,6 @@ export const CATEGORY_ICON_FILES: { [key: string]: any } = {
   'Others': require('../assets/report icons/others.svg'),
 };
 
-// Mapping of category names to their display names
 export const CATEGORY_DISPLAY_NAMES: { [key: string]: string } = {
   'Theft': 'Theft',
   'Reports/Agreement': 'Reports/Agreement',

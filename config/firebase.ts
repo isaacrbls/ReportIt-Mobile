@@ -1,11 +1,16 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { 
+  initializeAuth, 
+  getAuth, 
+  Auth
+} from 'firebase/auth';
+// @ts-ignore
+import { getReactNativePersistence } from 'firebase/node_modules/@firebase/auth/dist/rn/index';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyAOz81U2qnC2MEq-P1yMbUiQW8qAPTh9OU",
   authDomain: "admin-76567.firebaseapp.com",
@@ -17,22 +22,26 @@ const firebaseConfig = {
   measurementId: "G-CQFJZ4N4NM"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Authentication
-// Note: Firebase Auth in React Native will show a warning about AsyncStorage.
-// This is informational only - auth state persists in memory during the app session.
-// Users stay logged in and the app functions normally.
-export const auth = getAuth(app);
+let auth: Auth;
+try {
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
+  });
+  console.log('✅ Firebase Auth initialized with AsyncStorage persistence');
+} catch (error: any) {
+  if (error?.code === 'auth/already-initialized') {
+    console.log('⚠️ Firebase Auth already initialized, using existing instance');
+    auth = getAuth(app);
+  } else {
+    console.error('❌ Error initializing Firebase Auth:', error);
+    auth = getAuth(app);
+  }
+}
 
-// Initialize Realtime Database and get a reference to the service
+export { auth };
 export const database = getDatabase(app);
-
-// Initialize Firestore and get a reference to the service
 export const firestore = getFirestore(app);
-
-// Initialize Cloud Storage and get a reference to the service
 export const storage = getStorage(app);
-
 export default app;

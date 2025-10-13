@@ -34,7 +34,6 @@ class LocationService {
       const { status } = await Location.requestForegroundPermissionsAsync();
       const granted = status === Location.PermissionStatus.GRANTED;
       
-      // If permission granted, check if location services are enabled
       if (granted) {
         const servicesEnabled = await this.isLocationEnabled();
         if (!servicesEnabled) {
@@ -63,9 +62,6 @@ class LocationService {
     }
   }
 
-  /**
-   * Prompts user to enable location services in device settings
-   */
   private promptEnableLocationServices(): Promise<boolean> {
     return new Promise((resolve) => {
       Alert.alert(
@@ -90,9 +86,6 @@ class LocationService {
     });
   }
 
-  /**
-   * Prompts user to grant location permission in device settings
-   */
   private promptGrantLocationPermission(): Promise<boolean> {
     return new Promise((resolve) => {
       Alert.alert(
@@ -119,7 +112,6 @@ class LocationService {
 
   async getCurrentLocation(): Promise<LocationCoords | null> {
     try {
-      // First check if location services are enabled
       const servicesEnabled = await this.isLocationEnabled();
       if (!servicesEnabled) {
         console.warn('⚠️ Location services are disabled');
@@ -153,7 +145,6 @@ class LocationService {
     } catch (error: any) {
       console.error('❌ Error getting current location:', error.message || error);
       
-      // Show a generic error alert for unexpected errors
       Alert.alert(
         'Location Error',
         'Unable to get your current location. Please try again.',

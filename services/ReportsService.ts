@@ -69,7 +69,6 @@ export class ReportsService {
     const geoLat = data.GeoLocation?._lat || data.geoLocation?.latitude || data.Latitude || data.latitude || 0;
     const geoLng = data.GeoLocation?._long || data.geoLocation?.longitude || data.Longitude || data.longitude || 0;
 
-    // Handle Firestore Timestamp objects and strings
     let dateTime = '';
     const rawDateTime = data.DateTime || data.dateTime;
     if (rawDateTime) {
@@ -131,7 +130,6 @@ export class ReportsService {
           description: report.description ? report.description.substring(0, 50) + '...' : 'NOT SET'
         });
         
-        // Only include reports that have valid coordinates
         if (report.geoLocation.latitude !== 0 && report.geoLocation.longitude !== 0) {
           reports.push(report);
         } else {
@@ -200,7 +198,6 @@ export class ReportsService {
       snap1.forEach((d) => map.set(d.id, this.mapToReport(d.id, d.data())));
       snap2.forEach((d) => map.set(d.id, this.mapToReport(d.id, d.data())));
 
-      // Optional: sort by createdAt/DateTime desc if available
       const items = Array.from(map.values());
       items.sort((a, b) => (new Date(b.dateTime).getTime() || 0) - (new Date(a.dateTime).getTime() || 0));
 
@@ -341,7 +338,6 @@ export class ReportsService {
     try {
       console.log('🔄 Creating report in Firestore with data:', reportData);
       
-      // Use custom timestamp if provided (for offline reports), otherwise use current time
       const dateTime = customTimestamp || new Date().toISOString();
       
       const newReport = {
@@ -379,7 +375,6 @@ export class ReportsService {
         stack: error.stack
       });
       
-      // Provide more specific error messages based on error code
       let errorMessage = error.message || 'Failed to create report';
       
       if (error.code === 'permission-denied') {
@@ -413,7 +408,6 @@ export class ReportsService {
         return allReportsResult;
       }
       
-      // Filter reports within radius using Haversine formula
       const nearbyReports = allReportsResult.data.filter(report => {
         const distance = this.calculateDistance(
           centerLat, centerLng,
@@ -462,7 +456,6 @@ export class ReportsService {
     try {
       console.log('🔥 Calculating hotspots...', targetBarangay ? `for ${targetBarangay}` : 'for all areas');
       
-      // Get all reports first
       const reportsResult = await this.getAllReports();
       if (!reportsResult.success || !reportsResult.data) {
         return {
@@ -471,8 +464,6 @@ export class ReportsService {
         };
       }
 
-      // Filter verified reports for the specific barangay (or all if no barangay specified)
-      // Only include reports from the last 30 days
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       
@@ -480,10 +471,8 @@ export class ReportsService {
         if (r.status !== "Verified") return false;
         if (r.geoLocation.latitude === 0 || r.geoLocation.longitude === 0) return false;
         if (targetBarangay && r.barangay !== targetBarangay) return false;
-        // Exclude sensitive reports from hotspot calculation
         if (r.isSensitive) return false;
         
-        // Check if report is within last 30 days
         try {
           const reportDate = new Date(r.dateTime);
           return reportDate >= thirtyDaysAgo;
@@ -495,10 +484,9 @@ export class ReportsService {
 
       console.log(`📊 Found ${filteredReports.length} verified reports for hotspot analysis`);
 
-      const gridSize = 0.001; // Grid size for clustering incidents
+      const gridSize = 0.001;
       const locations: { [key: string]: { lat: number; lng: number; incidents: Report[]; count: number; barangay?: string } } = {};
       
-      // Group incidents by grid coordinates
       filteredReports.forEach(report => {
         const gridLat = Math.floor(report.geoLocation.latitude / gridSize) * gridSize;
         const gridLng = Math.floor(report.geoLocation.longitude / gridSize) * gridSize;
@@ -596,7 +584,6 @@ export class ReportsService {
               if (typeof rawDateTime === 'string') {
                 dateTime = rawDateTime;
               } else if (rawDateTime.seconds) {
-                // Firestore Timestamp object
                 dateTime = new Date(rawDateTime.seconds * 1000).toISOString();
               }
             }
@@ -628,7 +615,6 @@ export class ReportsService {
               hasMedia: data.hasMedia || (data.MediaURL || data.mediaURL) ? true : false
             };
             
-            // Only include reports that have valid coordinates
             if (report.geoLocation.latitude !== 0 && report.geoLocation.longitude !== 0) {
               reports.push(report);
             }
@@ -652,7 +638,6 @@ export class ReportsService {
       if (onError) {
         onError(error.message || 'Failed to set up real-time listener');
       }
-      // Return a no-op function if setup fails
       return () => {};
     }
   }

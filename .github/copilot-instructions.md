@@ -1,9 +1,11 @@
 # ReportIt Mobile - AI Coding Agent Instructions
 
 ## Project Overview
-ReportIt is a React Native mobile app (Expo) for reporting and visualizing incidents in Bulacan, Philippines. Users can submit geo-located incident reports, view hotspot maps, and analyze local safety patterns.
+ReportIt is a capstone project - a React Native mobile app (Expo) for reporting and visualizing incidents in Bulacan, Philippines. Users can submit geo-located incident reports, view hotspot maps, and analyze local safety patterns to improve community awareness and public safety.
 
-**Stack**: React Native 0.81, Expo 54, TypeScript, Firebase (Auth, Realtime Database, Firestore, Storage), React Navigation
+**Project Type**: Academic Capstone Project  
+**Stack**: React Native 0.81, Expo 54, TypeScript, Firebase (Auth, Realtime Database, Firestore, Storage), React Navigation  
+**Target Region**: Bulacan Province, Philippines (focused on Malolos City)
 
 ## Architecture & Data Flow
 

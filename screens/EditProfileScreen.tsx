@@ -12,6 +12,7 @@ import {
   Image,
   ActionSheetIOS,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { NavigationProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/FontAwesome';
@@ -22,6 +23,7 @@ import {
 } from '@expo-google-fonts/poppins';
 import { AuthService } from '../services/AuthService';
 import { UserService, UserProfile } from '../services/UserService';
+import { NavigationHelper } from '../utils/NavigationHelper';
 
 interface EditProfileScreenProps {
   navigation: NavigationProp<any>;
@@ -51,6 +53,21 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ navigation }) => 
   useEffect(() => {
     loadUserData();
   }, []);
+
+  // Handle back navigation to Map
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      const context = NavigationHelper.createContext('EditProfile', 'Map');
+      const handled = NavigationHelper.handleBackNavigation(
+        navigation,
+        'EditProfile',
+        context
+      );
+      return handled;
+    });
+
+    return () => backHandler.remove();
+  }, [navigation]);
 
   const loadUserData = async () => {
     setIsLoadingUserData(true);
@@ -338,7 +355,10 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ navigation }) => 
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            const context = NavigationHelper.createContext('EditProfile', 'Map');
+            NavigationHelper.handleBackNavigation(navigation, 'EditProfile', context);
+          }}
         >
           <Icon name="arrow-left" size={20} color="white" />
         </TouchableOpacity>

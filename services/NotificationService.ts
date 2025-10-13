@@ -4,10 +4,8 @@ import Constants from 'expo-constants';
 import { Platform, Alert, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Check if running in Expo Go (push notifications not supported in Expo Go SDK 53+)
 const isExpoGo = Constants.appOwnership === 'expo';
 
-// Configure how notifications are handled when app is in foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -59,7 +57,6 @@ export class NotificationService {
     try {
       console.log('🔔 Requesting notification permissions...');
 
-      // Check if running in Expo Go
       if (isExpoGo) {
         console.warn('⚠️ Push notifications are not supported in Expo Go (SDK 53+)');
         console.log('ℹ️ For push notifications, build a development or production build');
@@ -70,7 +67,6 @@ export class NotificationService {
         };
       }
 
-      // Check if this is a real device
       if (!Device.isDevice) {
         console.warn('⚠️ Push notifications only work on physical devices');
         return {
@@ -80,13 +76,11 @@ export class NotificationService {
         };
       }
 
-      // Get current permission status
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       console.log('🔔 Current notification status:', existingStatus);
 
       let finalStatus = existingStatus;
 
-      // If permission not determined, ask user
       if (existingStatus !== 'granted') {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
@@ -94,11 +88,9 @@ export class NotificationService {
         console.log('🔔 New notification status after request:', finalStatus);
       }
 
-      // Handle permission result
       if (finalStatus === 'granted') {
         console.log('✅ Notification permissions granted!');
         
-        // Register for push notifications and get token
         const token = await this.registerForPushNotifications();
         if (token) {
           console.log('📱 Push notification token:', token);
@@ -148,14 +140,11 @@ export class NotificationService {
         return null;
       }
 
-      // Get push notification token
       const token = (await Notifications.getExpoPushTokenAsync()).data;
       console.log('📱 Expo push token:', token);
 
-      // Store token locally
       await AsyncStorage.setItem(this.TOKEN_KEY, token);
 
-      // Configure Android notification channel
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
           name: 'default',
@@ -164,7 +153,6 @@ export class NotificationService {
           lightColor: '#EF4444',
         });
 
-        // Create specific channel for verified reports
         await Notifications.setNotificationChannelAsync('verified-reports', {
           name: 'Verified Reports',
           importance: Notifications.AndroidImportance.HIGH,

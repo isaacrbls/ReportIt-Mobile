@@ -58,9 +58,13 @@ const TermsAndConditionsScreen: React.FC<TermsAndConditionsScreenProps> = ({ nav
     Poppins_700Bold,
   });
 
-  // Handle hardware back button using logical navigation
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (route?.params?.fromMenu) {
+        navigation.navigate('Map');
+        return true;
+      }
+      
       const context = NavigationHelper.createContext('TermsAndConditions', 'Signup');
       const handled = NavigationHelper.handleBackNavigation(
         navigation, 
@@ -84,6 +88,10 @@ const TermsAndConditionsScreen: React.FC<TermsAndConditionsScreenProps> = ({ nav
   }
 
   const handleAcceptTerms = () => {
+    if (route?.params?.fromMenu) {
+      navigation.navigate('Map');
+      return;
+    }
 
     if (route?.params?.fromSignup) {
       navigation.navigate('Signup', { 
@@ -96,6 +104,10 @@ const TermsAndConditionsScreen: React.FC<TermsAndConditionsScreenProps> = ({ nav
   };
 
   const handleDeclineTerms = () => {
+    if (route?.params?.fromMenu) {
+      navigation.navigate('Map');
+      return;
+    }
 
     if (route?.params?.fromSignup) {
       navigation.navigate('Signup', { 

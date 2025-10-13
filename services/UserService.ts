@@ -1,7 +1,7 @@
 import { ref, set, get, update, remove } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { database, storage, auth } from '../config/firebase';
-import { User } from 'firebase/auth';
+import { User, Auth } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CACHED_USER_PROFILE_KEY = '@reportit_cached_user_profile';

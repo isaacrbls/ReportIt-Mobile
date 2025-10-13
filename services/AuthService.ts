@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { UserService, CreateUserProfileData } from './UserService';
+import { SessionManager } from '../utils/SessionManager';
 
 export interface AuthResult {
   success: boolean;
@@ -64,6 +65,14 @@ export class AuthService {
         await UserService.reactivateAccount(userCredential.user.uid);
         console.log('Account reactivated successfully');
       }
+      
+      // Set session data in AsyncStorage
+      console.log('✅ Setting registered user session...');
+      await SessionManager.setRegisteredUserSession({
+        uid: userCredential.user.uid,
+        email: userCredential.user.email || email,
+        displayName: userCredential.user.displayName || undefined,
+      });
       
       return {
         success: true,
@@ -163,13 +172,22 @@ export class AuthService {
    */
   static async signOut(): Promise<AuthResult> {
     try {
+      console.log('🔐 Signing out user and clearing session...');
+      
+      // Clear all session data from AsyncStorage
+      await SessionManager.clearSession();
+      
+      // Sign out from Firebase
       await signOut(auth);
+      
+      console.log('✅ User signed out successfully');
       return {
         success: true
       };
     } catch (error: any) {
       // Don't log the error to console for sign out errors
       // Just return the user-friendly error message
+      console.error('❌ Error during sign out:', error);
       return {
         success: false,
         error: this.getErrorMessage(error)

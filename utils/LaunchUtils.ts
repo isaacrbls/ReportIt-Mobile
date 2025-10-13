@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SessionManager, STORAGE_KEYS } from './SessionManager';
 
 /**
  * Utility functions for managing first-time launch state
+ * Now integrated with SessionManager for comprehensive session handling
  */
 export class LaunchUtils {
   /**
@@ -10,10 +12,11 @@ export class LaunchUtils {
    */
   static async resetToFirstLaunch(): Promise<void> {
     try {
-      await AsyncStorage.removeItem('hasLaunchedBefore');
-      console.log('App reset to first-launch state');
+      await AsyncStorage.removeItem(STORAGE_KEYS.HAS_LAUNCHED_BEFORE);
+      await AsyncStorage.removeItem(STORAGE_KEYS.HAS_SEEN_WELCOME);
+      console.log('✅ App reset to first-launch state');
     } catch (error) {
-      console.error('Error resetting first-launch state:', error);
+      console.error('❌ Error resetting first-launch state:', error);
     }
   }
 
@@ -22,10 +25,9 @@ export class LaunchUtils {
    */
   static async isFirstLaunch(): Promise<boolean> {
     try {
-      const hasLaunchedBefore = await AsyncStorage.getItem('hasLaunchedBefore');
-      return hasLaunchedBefore === null;
+      return !(await SessionManager.hasLaunchedBefore());
     } catch (error) {
-      console.error('Error checking first launch:', error);
+      console.error('❌ Error checking first launch:', error);
       return true;
     }
   }
@@ -35,9 +37,22 @@ export class LaunchUtils {
    */
   static async markAsLaunched(): Promise<void> {
     try {
-      await AsyncStorage.setItem('hasLaunchedBefore', 'true');
+      await SessionManager.markAsLaunched();
     } catch (error) {
-      console.error('Error marking app as launched:', error);
+      console.error('❌ Error marking app as launched:', error);
+    }
+  }
+
+  /**
+   * Reset all app state (for debugging)
+   */
+  static async resetAllState(): Promise<void> {
+    try {
+      await SessionManager.clearSession();
+      await this.resetToFirstLaunch();
+      console.log('✅ All app state reset');
+    } catch (error) {
+      console.error('❌ Error resetting all state:', error);
     }
   }
 }

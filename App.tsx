@@ -8,6 +8,7 @@ import { View, ActivityIndicator, BackHandler, Platform, AppState, AppStateStatu
 import { LaunchUtils } from './utils/LaunchUtils';
 import { NavigationHelper } from './utils/NavigationHelper';
 import { AuthProvider, useAuth } from './services/AuthContext';
+import { SessionManager } from './utils/SessionManager';
 
 import SplashScreen from './screens/SplashScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
@@ -64,10 +65,18 @@ function AppNavigator() {
 
   const checkFirstLaunch = async () => {
     try {
-      const hasLaunchedBefore = await AsyncStorage.getItem('hasLaunchedBefore');
-      setIsFirstLaunch(hasLaunchedBefore === null);
+      console.log('🔍 Checking app startup state...');
+      
+      // Check if this is first launch
+      const hasLaunched = await SessionManager.hasLaunchedBefore();
+      setIsFirstLaunch(!hasLaunched);
+      
+      // Log session debug info
+      const sessionInfo = await SessionManager.getSessionDebugInfo();
+      console.log('📊 Session state:', sessionInfo);
+      
     } catch (error) {
-      console.error('Error checking first launch:', error);
+      console.error('❌ Error checking first launch:', error);
       setIsFirstLaunch(true);
     } finally {
       setIsLoading(false);
@@ -76,10 +85,12 @@ function AppNavigator() {
 
   const markAsLaunched = async () => {
     try {
-      await AsyncStorage.setItem('hasLaunchedBefore', 'true');
+      await SessionManager.markAsLaunched();
+      await SessionManager.markWelcomeAsSeen();
       setIsFirstLaunch(false);
+      console.log('✅ App marked as launched');
     } catch (error) {
-      console.error('Error marking app as launched:', error);
+      console.error('❌ Error marking app as launched:', error);
     }
   };
 
@@ -106,16 +117,18 @@ function AppNavigator() {
     );
   }
 
-  // Determine initial route:
-  // 1. If user is authenticated, go to Map
-  // 2. If first launch, go to Welcome
-  // 3. Otherwise, go to Login
+  // Determine initial route following the startup flow:
+  // 1. Check Firebase Auth (persisted via AsyncStorage)
+  // 2. If authenticated → go to Map
+  // 3. If not authenticated but first launch → go to Welcome
+  // 4. Otherwise → go to Login
   const initialRouteName = isAuthenticated 
     ? "Map" 
     : (isFirstLaunch ? "Welcome" : "Login");
 
-  console.log('🔐 Auth state:', {
+  console.log('🔐 App startup decision:', {
     isAuthenticated,
+    isFirstLaunch,
     userEmail: user?.email || 'No user',
     initialRoute: initialRouteName
   });

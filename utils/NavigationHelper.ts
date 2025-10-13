@@ -12,9 +12,7 @@ export interface NavigationContext {
 }
 
 export class NavigationHelper {
-  // Define logical navigation flows
   private static readonly NAVIGATION_FLOWS = {
-    // Authentication Flow
     'Welcome': {
       allowedNext: ['Login', 'Map'],
       logicalBack: 'EXIT_APP'
@@ -35,7 +33,6 @@ export class NavigationHelper {
       allowedNext: ['Login'],
       logicalBack: 'Login'
     },
-    // Main App Flow
     'Map': {
       allowedNext: ['IncidentAnalysis', 'EditProfile'],
       logicalBack: 'EXIT_APP' // Map is home base
@@ -64,27 +61,22 @@ export class NavigationHelper {
     const screenFlow = this.NAVIGATION_FLOWS[currentScreen as keyof typeof this.NAVIGATION_FLOWS];
     
     if (!screenFlow) {
-      return 'DEFAULT'; // Use default navigation behavior
+      return 'DEFAULT';
     }
 
-    // Handle special cases based on context
     if (currentScreen === 'Login') {
-      // Always exit from login, never go back to Welcome
       return 'EXIT_APP';
     }
 
     if (currentScreen === 'Map') {
-      // Map is the home screen, exit app
       return 'EXIT_APP';
     }
 
     if (currentScreen === 'TermsAndConditions') {
-      // Always return to signup with proper context
       return 'Signup';
     }
 
     if (currentScreen === 'Signup' && context.previousScreen === 'TermsAndConditions') {
-      // If coming back from terms, go to login
       return 'Login';
     }
 
@@ -139,7 +131,6 @@ export class NavigationHelper {
         return true;
         
       case 'Signup':
-        // Special handling for Terms -> Signup flow
         if (currentScreen === 'TermsAndConditions') {
           navigation.navigate('Signup', {
             termsAccepted: false,
@@ -151,7 +142,6 @@ export class NavigationHelper {
         return true;
         
       default:
-        // Navigate to specific screen
         navigation.navigate(destination, customParams);
         return true;
     }

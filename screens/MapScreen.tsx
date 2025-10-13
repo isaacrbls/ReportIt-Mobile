@@ -2188,7 +2188,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             {!isConnected && pendingReportsCount > 0 && (
               <View style={styles.offlineBadge}>
                 <Text style={styles.offlineBadgeText}>
-                  📴 OFFLINE MODE - {pendingReportsCount} report{pendingReportsCount !== 1 ? 's' : ''} pending upload
+                  OFFLINE MODE - {pendingReportsCount} report{pendingReportsCount !== 1 ? 's' : ''} pending upload
                 </Text>
               </View>
             )}
@@ -2196,7 +2196,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             {isSyncing && (
               <View style={styles.syncingBadge}>
                 <Text style={styles.syncingBadgeText}>
-                  🔄 SYNCING REPORTS...
+                  SYNCING REPORTS...
                 </Text>
               </View>
             )}
@@ -2272,7 +2272,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
                         useNativeDriver: true,
                       }).start(() => {
                         setIsSidebarVisible(false);
-                        navigation.navigate('Signup');
+                        navigation.navigate('Signup', { fromMenu: true });
                       });
                     }}
                   >
@@ -2308,7 +2308,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
                     useNativeDriver: true,
                   }).start(() => {
                     setIsSidebarVisible(false);
-                    navigation.navigate('TermsAndConditions');
+                    navigation.navigate('TermsAndConditions', { fromMenu: true });
                   });
                 }}
               >
