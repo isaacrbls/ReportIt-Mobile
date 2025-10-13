@@ -11,7 +11,7 @@ ReportIt is a mobile application designed to empower communities in Bulacan Prov
 **Project Type**: Academic Capstone Project  
 **Institution**: Bulacan State University  
 **Program**: Bachelor of Science in Information Technology 
-**Academic Year**: 2024-2025  
+**Academic Year**: 2025-2026  
 **Target Region**: Bulacan Province
 
 ---
