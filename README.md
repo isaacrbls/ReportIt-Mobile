@@ -320,8 +320,7 @@ This project is an academic capstone project. All rights reserved.
 ## 📞 Contact & Support
 
 **Project Team**:
-- **Developer**: Isaac Ramboyong
-- **GitHub**: [@isaacrbls](https://github.com/isaacrbls)
+- **Developer**: Emmanuel Isaac Robles & Josh Matrix Salonga
 
 **Project Repository**: [ReportIt-Mobile](https://github.com/isaacrbls/ReportIt-Mobile)
 
@@ -335,16 +334,7 @@ For questions, issues, or suggestions, please contact the development team or op
 - **Expo** - Mobile development framework
 - **Leaflet.js** - Interactive mapping library
 - **React Native Community** - Open-source components and support
-- **Bulacan Community** - Inspiration and target audience
-
----
-
-## 📊 Project Status
-
-**Current Phase**: Development & Testing  
-**Target Launch**: [Your Target Date]  
-**Last Updated**: October 2025
-
+  
 ---
 
 ## 🎯 Project Goals
@@ -357,5 +347,3 @@ This capstone project aims to:
 5. **Create Social Impact** - Contribute to safer communities in Bulacan
 
 ---
-
-**Built with ❤️ for the Bulacan Community**
