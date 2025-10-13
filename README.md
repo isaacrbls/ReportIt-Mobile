@@ -151,8 +151,7 @@ ReportIt-Mobile/
 │   ├── splash-icon.png
 │   └── report icons/          # Category-specific SVG icons
 ├── components/                # Reusable UI components
-│   ├── CustomAlertContext.tsx
-│   └── IconComponents.tsx
+│   └── IconComponents.tsx     # Font Awesome icon components
 ├── config/                    # Configuration files
 │   └── firebase.ts            # Firebase initialization
 ├── screens/                   # Application screens

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   Animated,
   Dimensions,
@@ -17,7 +16,6 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
-
     const animationSequence = Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -31,9 +29,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
       }),
     ]);
 
-
     animationSequence.start(() => {
-
       setTimeout(() => {
         Animated.timing(fadeAnim, {
           toValue: 0,
@@ -83,20 +79,6 @@ const styles = StyleSheet.create({
     height: 700,
     maxWidth: Dimensions.get('window').width * 0.5,
     maxHeight: Dimensions.get('window').height * 0.25,
-    marginBottom: 20,
-  },
-  appName: {
-    color: 'white',
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  tagline: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 16,
-    fontWeight: '500',
-    textAlign: 'center',
   },
 });
 
