@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const OFFLINE_REPORTS_KEY = '@reportit_offline_reports';
+const SYNC_METADATA_KEY = '@reportit_sync_metadata';
 
 export interface OfflineReport {
   id: string; // Temporary local ID
@@ -17,6 +18,18 @@ export interface OfflineReport {
   mediaType?: string;
   mediaURL?: string;
   mediaAssets?: any[]; // Store media assets for later upload
+  syncStatus?: 'pending' | 'syncing' | 'failed' | 'synced'; // Track sync status
+  syncAttempts?: number; // Number of sync attempts
+  lastSyncAttempt?: string; // Last sync attempt timestamp
+  syncErrorMessage?: string; // Last error message if failed
+}
+
+export interface SyncMetadata {
+  reportId: string;
+  firestoreId?: string; // Firestore document ID after successful sync
+  syncedAt?: string; // When successfully synced
+  attempts: number; // Number of sync attempts
+  lastAttempt?: string; // Last attempt timestamp
 }
 
 export class OfflineReportsService {
@@ -30,8 +43,15 @@ export class OfflineReportsService {
       // Get existing offline reports
       const existingReports = await this.getOfflineReports();
       
+      // Ensure report has sync status
+      const reportWithStatus: OfflineReport = {
+        ...report,
+        syncStatus: 'pending',
+        syncAttempts: 0,
+      };
+      
       // Add new report
-      const updatedReports = [...existingReports, report];
+      const updatedReports = [...existingReports, reportWithStatus];
       
       // Save to AsyncStorage
       await AsyncStorage.setItem(OFFLINE_REPORTS_KEY, JSON.stringify(updatedReports));
@@ -125,5 +145,138 @@ export class OfflineReportsService {
    */
   static generateLocalId(): string {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  }
+
+  /**
+   * Update sync status of a specific report
+   */
+  static async updateReportSyncStatus(
+    reportId: string, 
+    status: 'pending' | 'syncing' | 'failed' | 'synced',
+    errorMessage?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const reports = await this.getOfflineReports();
+      const updatedReports = reports.map(report => {
+        if (report.id === reportId) {
+          return {
+            ...report,
+            syncStatus: status,
+            syncAttempts: (report.syncAttempts || 0) + (status === 'syncing' ? 1 : 0),
+            lastSyncAttempt: status === 'syncing' || status === 'failed' ? new Date().toISOString() : report.lastSyncAttempt,
+            syncErrorMessage: errorMessage || report.syncErrorMessage,
+          };
+        }
+        return report;
+      });
+
+      await AsyncStorage.setItem(OFFLINE_REPORTS_KEY, JSON.stringify(updatedReports));
+      return { success: true };
+    } catch (error: any) {
+      console.error('❌ Error updating sync status:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Failed to update sync status' 
+      };
+    }
+  }
+
+  /**
+   * Save sync metadata after successful sync to Firestore
+   */
+  static async saveSyncMetadata(localId: string, firestoreId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const metadataJson = await AsyncStorage.getItem(SYNC_METADATA_KEY);
+      const metadata: SyncMetadata[] = metadataJson ? JSON.parse(metadataJson) : [];
+      
+      // Check if already synced (prevent duplicates)
+      const existingMeta = metadata.find(m => m.reportId === localId);
+      if (existingMeta) {
+        console.log('⚠️ Report already synced:', localId, '-> Firestore ID:', existingMeta.firestoreId);
+        return { success: true }; // Already synced
+      }
+
+      const newMeta: SyncMetadata = {
+        reportId: localId,
+        firestoreId,
+        syncedAt: new Date().toISOString(),
+        attempts: 1,
+        lastAttempt: new Date().toISOString(),
+      };
+
+      metadata.push(newMeta);
+      await AsyncStorage.setItem(SYNC_METADATA_KEY, JSON.stringify(metadata));
+      
+      console.log('✅ Sync metadata saved for report:', localId);
+      return { success: true };
+    } catch (error: any) {
+      console.error('❌ Error saving sync metadata:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Failed to save sync metadata' 
+      };
+    }
+  }
+
+  /**
+   * Check if a report has already been synced (duplicate prevention)
+   */
+  static async isReportAlreadySynced(reportId: string): Promise<boolean> {
+    try {
+      const metadataJson = await AsyncStorage.getItem(SYNC_METADATA_KEY);
+      if (!metadataJson) return false;
+      
+      const metadata: SyncMetadata[] = JSON.parse(metadataJson);
+      return metadata.some(m => m.reportId === reportId);
+    } catch (error) {
+      console.error('❌ Error checking sync status:', error);
+      return false; // Assume not synced if error
+    }
+  }
+
+  /**
+   * Get pending reports (not yet synced or failed)
+   */
+  static async getPendingReports(): Promise<OfflineReport[]> {
+    try {
+      const allReports = await this.getOfflineReports();
+      return allReports.filter(report => 
+        report.syncStatus === 'pending' || 
+        report.syncStatus === 'failed' || 
+        !report.syncStatus
+      );
+    } catch (error) {
+      console.error('❌ Error getting pending reports:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Clean up old sync metadata (optional housekeeping)
+   */
+  static async cleanupSyncMetadata(olderThanDays: number = 30): Promise<{ success: boolean; error?: string }> {
+    try {
+      const metadataJson = await AsyncStorage.getItem(SYNC_METADATA_KEY);
+      if (!metadataJson) return { success: true };
+      
+      const metadata: SyncMetadata[] = JSON.parse(metadataJson);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
+      
+      const cleanedMetadata = metadata.filter(m => {
+        if (!m.syncedAt) return true;
+        return new Date(m.syncedAt) > cutoffDate;
+      });
+
+      await AsyncStorage.setItem(SYNC_METADATA_KEY, JSON.stringify(cleanedMetadata));
+      console.log(`✅ Cleaned ${metadata.length - cleanedMetadata.length} old sync metadata entries`);
+      return { success: true };
+    } catch (error: any) {
+      console.error('❌ Error cleaning sync metadata:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Failed to clean sync metadata' 
+      };
+    }
   }
 }

@@ -25,6 +25,7 @@ import NetInfo from '@react-native-community/netinfo';
 import LocationService, { LocationCoords } from '../services/LocationService';
 import { ReportsService, Report, Hotspot, CreateReportData } from '../services/ReportsService';
 import { OfflineReportsService } from '../services/OfflineReportsService';
+import { SyncResultModal } from '../components/SyncResultModal';
 import { AuthService } from '../services/AuthService';
 import { UserService } from '../services/UserService';
 import { isReportingAllowed, BULACAN_CITIES } from '../utils/BulacanBarangays';
@@ -602,6 +603,20 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   const [pendingReportsCount, setPendingReportsCount] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   
+  // Sync result modal state
+  const [showSyncResultModal, setShowSyncResultModal] = useState(false);
+  const [syncResult, setSyncResult] = useState<{
+    successCount: number;
+    failedCount: number;
+    timestamp: string;
+    failedReports: Array<{ title: string; error: string }>;
+  }>({
+    successCount: 0,
+    failedCount: 0,
+    timestamp: new Date().toISOString(),
+    failedReports: [],
+  });
+  
   const slideAnim = useRef(new Animated.Value(-280)).current;
 
   // Search is now triggered only on Enter key press (onSubmitEditing)
@@ -1093,25 +1108,40 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   // Function to sync offline reports when connection is restored
   const syncOfflineReports = async () => {
     try {
-      const offlineReports = await OfflineReportsService.getOfflineReports();
+      // Get pending reports only (not already synced)
+      const offlineReports = await OfflineReportsService.getPendingReports();
       
       if (offlineReports.length === 0) {
         setPendingReportsCount(0);
         return;
       }
 
+      console.log(`🔄 Starting sync for ${offlineReports.length} pending reports...`);
       setIsSyncing(true);
       
       let successCount = 0;
       let failureCount = 0;
+      const failedReportsDetails: Array<{ title: string; error: string }> = [];
 
       for (const report of offlineReports) {
         try {
+          // Check if already synced (duplicate prevention)
+          const alreadySynced = await OfflineReportsService.isReportAlreadySynced(report.id);
+          if (alreadySynced) {
+            console.log(`⚠️ Report ${report.id} already synced, removing from queue`);
+            await OfflineReportsService.removeOfflineReport(report.id);
+            continue;
+          }
+
+          // Update status to syncing
+          await OfflineReportsService.updateReportSyncStatus(report.id, 'syncing');
+
           // Upload media if any
           let mediaURL = report.mediaURL;
           let mediaType = report.mediaType;
 
           if (report.mediaAssets && report.mediaAssets.length > 0) {
+            console.log(`📤 Uploading ${report.mediaAssets.length} media files for report: ${report.title}`);
             const uploadPromises = report.mediaAssets.map(async (media: any) => {
               return await uploadMediaToStorage(media, report.submittedByEmail);
             });
@@ -1123,6 +1153,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
               const types = report.mediaAssets.map((m: any) => m.type).join(', ');
               mediaType = `${successfulUploads.length} files: ${types}`;
               mediaURL = successfulUploads.join(';');
+              console.log(`✅ Successfully uploaded ${successfulUploads.length} media files`);
+            } else {
+              console.log(`⚠️ No media files uploaded successfully`);
             }
           }
 
@@ -1141,16 +1174,45 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             mediaURL
           };
 
+          console.log(`📡 Submitting report to Firestore: ${report.title}`);
           const result = await ReportsService.createReport(reportData, report.createdAt);
           
-          if (result.success) {
+          if (result.success && result.reportId) {
+            // Save sync metadata to prevent duplicates
+            await OfflineReportsService.saveSyncMetadata(report.id, result.reportId);
+            
+            // Update status to synced
+            await OfflineReportsService.updateReportSyncStatus(report.id, 'synced');
+            
+            // Remove from offline storage
             await OfflineReportsService.removeOfflineReport(report.id);
+            
             successCount++;
+            console.log(`✅ Report synced successfully: ${report.title} (Firestore ID: ${result.reportId})`);
           } else {
+            // Mark as failed with error message
+            const errorMsg = result.error || 'Unknown error';
+            await OfflineReportsService.updateReportSyncStatus(report.id, 'failed', errorMsg);
+            
             failureCount++;
+            failedReportsDetails.push({
+              title: report.title,
+              error: errorMsg,
+            });
+            console.error(`❌ Failed to sync report: ${report.title} - ${errorMsg}`);
           }
-        } catch (error) {
+        } catch (error: any) {
+          const errorMsg = error.message || 'Network error';
+          
+          // Mark as failed
+          await OfflineReportsService.updateReportSyncStatus(report.id, 'failed', errorMsg);
+          
           failureCount++;
+          failedReportsDetails.push({
+            title: report.title,
+            error: errorMsg,
+          });
+          console.error(`❌ Exception during sync for report ${report.title}:`, error);
         }
       }
 
@@ -1158,20 +1220,30 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       const remainingCount = await OfflineReportsService.getOfflineReportsCount();
       setPendingReportsCount(remainingCount);
 
-      // Show result to user
+      // Show result modal if any reports were processed
       if (successCount > 0 || failureCount > 0) {
-        Alert.alert(
-          'Sync Complete',
-          `Successfully uploaded ${successCount} offline report${successCount !== 1 ? 's' : ''}${failureCount > 0 ? `. ${failureCount} failed.` : ''}`,
-          [{ text: 'OK' }]
-        );
+        setSyncResult({
+          successCount,
+          failedCount: failureCount,
+          timestamp: new Date().toISOString(),
+          failedReports: failedReportsDetails,
+        });
+        setShowSyncResultModal(true);
+        
+        console.log(`📊 Sync complete - Success: ${successCount}, Failed: ${failureCount}`);
         
         // Refresh reports if any succeeded
         if (successCount > 0) {
           fetchHotspots();
         }
       }
-    } catch (error) {
+
+      // Cleanup old sync metadata (30 days)
+      await OfflineReportsService.cleanupSyncMetadata(30);
+      
+    } catch (error: any) {
+      console.error('❌ Error during sync process:', error);
+      Alert.alert('Sync Error', 'An error occurred while syncing offline reports. They will be retried automatically.');
     } finally {
       setIsSyncing(false);
     }
@@ -1257,72 +1329,108 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   };
 
   const handleSubmitReport = async () => {
-    // ===== STEP 1: Basic validation =====
-    if (!reportTitle.trim()) {
-      Alert.alert('Error', 'Please enter a title for the incident');
-      return;
-    }
+    try {
+      // ===== STEP 1: Basic validation =====
+      if (!reportTitle.trim()) {
+        Alert.alert('Error', 'Please enter a title for the incident');
+        return;
+      }
 
-    if (reportCategory === 'Select type of incident') {
-      Alert.alert('Error', 'Please select a category for the incident');
-      return;
-    }
+      if (reportCategory === 'Select type of incident') {
+        Alert.alert('Error', 'Please select a category for the incident');
+        return;
+      }
 
-    if (!reportDescription.trim()) {
-      Alert.alert('Error', 'Please provide a description of the incident');
-      return;
-    }
+      if (!reportDescription.trim()) {
+        Alert.alert('Error', 'Please provide a description of the incident');
+        return;
+      }
 
-    // Check if user is authenticated
-    const currentUser = AuthService.getCurrentUser();
-    if (!currentUser) {
-      Alert.alert('Authentication Required', 'You must be logged in to submit a report');
-      return;
-    }
+      // Check if user is authenticated
+      const currentUser = AuthService.getCurrentUser();
+      if (!currentUser) {
+        Alert.alert('Authentication Required', 'You must be logged in to submit a report');
+        return;
+      }
 
-    setIsSubmittingReport(true);
+      setIsSubmittingReport(true);
+      console.log('🚀 Starting report submission...');
 
-    // ===== STEP 2: Check network connectivity FIRST =====
-    const networkState = await NetInfo.fetch();
-    const isOnline = networkState.isConnected ?? false;
-    
-    console.log('📡 Network check:', { 
-      isConnected: networkState.isConnected, 
-      isInternetReachable: networkState.isInternetReachable,
-      type: networkState.type,
-      finalDecision: isOnline ? 'ONLINE' : 'OFFLINE'
-    });
-
-    // ===== STEP 3: Handle OFFLINE submission (simplified path) =====
-    if (!isOnline) {
-      console.log('💾 Device is offline - saving report locally');
+      // ===== STEP 2: Check network connectivity FIRST =====
+      const networkState = await NetInfo.fetch();
+      const isOnline = networkState.isConnected ?? false;
       
-      try {
-        // Get cached user profile for offline validation
-        const cachedProfile = await UserService.getCachedUserProfile();
+      console.log('📡 Network check:', { 
+        isConnected: networkState.isConnected, 
+        isInternetReachable: networkState.isInternetReachable,
+        type: networkState.type,
+        finalDecision: isOnline ? 'ONLINE' : 'OFFLINE'
+      });
+
+      // ===== STEP 3: Handle OFFLINE submission (simplified path) =====
+      if (!isOnline) {
+        console.log('💾 Device is offline - saving report locally');
+        console.log('📝 Report data:', {
+          title: reportTitle,
+          category: reportCategory,
+          description: reportDescription.substring(0, 50)
+        });
         
-        if (!cachedProfile) {
-          Alert.alert(
-            'Profile Not Available',
-            'Unable to access your profile offline. Please connect to internet at least once before submitting offline reports.'
-          );
-          setIsSubmittingReport(false);
-          return;
-        }
+        try {
+          console.log('🔍 Step 1: Getting cached user profile...');
+          // Get cached user profile for offline validation
+          let cachedProfile = await UserService.getCachedUserProfile();
+          console.log('📦 Cached profile result:', cachedProfile ? 'Found' : 'Not found');
+          
+          // Fallback: If no cache, create minimal profile from current user
+          if (!cachedProfile) {
+            console.log('⚠️ No cached profile found, using minimal profile from current user');
+            console.log('👤 Current user:', { uid: currentUser.uid, email: currentUser.email });
+            
+            // Create minimal profile from current user data
+            cachedProfile = {
+              uid: currentUser.uid,
+              email: currentUser.email || 'unknown@email.com',
+              username: currentUser.email?.split('@')[0] || 'unknown',
+              firstName: '',
+              lastName: '',
+              barangay: 'Pinagbakahan', // Default barangay for offline reports
+              city: 'Malolos',
+              role: 'user',
+              createdAt: new Date().toISOString(),
+              suspended: false,
+            };
+            
+            console.log('✅ Created minimal profile for offline use:', cachedProfile.barangay);
+          }
 
-        // Check if user is suspended (from cache)
-        if (cachedProfile.suspended) {
-          Alert.alert(
-            'Account Suspended',
-            'Your account is suspended and you cannot submit reports.'
-          );
-          setIsSubmittingReport(false);
-          return;
-        }
+          console.log('🔍 Step 2: Checking suspension status...');
+          // Check if user is suspended (from cache) - safe to access now
+          if (cachedProfile && cachedProfile.suspended) {
+            console.log('❌ User is suspended');
+            const suspensionReason = cachedProfile.suspensionReason || 'Violation of community guidelines';
+            const suspensionEndDate = cachedProfile.suspensionEndDate 
+              ? new Date(cachedProfile.suspensionEndDate).toLocaleDateString('en-US', { 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric' 
+                })
+              : 'indefinitely';
+            
+            Alert.alert(
+              'Account Suspended',
+              `Your account is suspended and you cannot submit reports.\n\nReason: ${suspensionReason}\n\nSuspension until: ${suspensionEndDate}`
+            );
+            setIsSubmittingReport(false);
+            return;
+          }
+          console.log('✅ User not suspended');
 
+        console.log('🔍 Step 3: Getting location...');
         // Get location (with fallbacks)
         const locationService = LocationService.getInstance();
         let currentLocation = await locationService.getCurrentLocation();
+        console.log('📍 Location from service:', currentLocation ? 'Found' : 'Not found');
 
         // Fallback 1: Use cached location
         if (!currentLocation && lastKnownLocation) {
@@ -1335,6 +1443,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
 
         // Fallback 2: Use barangay center
         if (!currentLocation) {
+          console.log('📍 Trying barangay center fallback...');
           const { BARANGAY_COORDINATES } = await import('../utils/BulacanBarangays');
           const barangayData = BARANGAY_COORDINATES[cachedProfile.barangay];
           
@@ -1343,12 +1452,13 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
               latitude: barangayData.latitude,
               longitude: barangayData.longitude
             };
-            console.log('📍 Using barangay center for offline report');
+            console.log('📍 Using barangay center for offline report:', barangayData);
           }
         }
 
         // Final check
         if (!currentLocation) {
+          console.log('❌ No location available at all');
           Alert.alert(
             'Location Required',
             'Unable to determine your location. Please enable GPS and try again.'
@@ -1357,6 +1467,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           return;
         }
 
+        console.log('🔍 Step 4: Creating offline report object...');
         // Create offline report
         const offlineReport = {
           id: OfflineReportsService.generateLocalId(),
@@ -1372,13 +1483,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           createdAt: new Date().toISOString(),
           mediaAssets: selectedMedia.length > 0 ? selectedMedia : undefined
         };
+        console.log('✅ Offline report created:', offlineReport.id);
 
-        await OfflineReportsService.saveOfflineReport(offlineReport);
+        console.log('🔍 Step 5: Saving to AsyncStorage...');
+        const saveResult = await OfflineReportsService.saveOfflineReport(offlineReport);
+        console.log('💾 Save result:', saveResult);
         
+        if (!saveResult.success) {
+          throw new Error(saveResult.error || 'Failed to save offline report');
+        }
+        
+        console.log('🔍 Step 6: Getting pending count...');
         // Update pending count
         const count = await OfflineReportsService.getOfflineReportsCount();
+        console.log('📊 Pending reports count:', count);
         setPendingReportsCount(count);
 
+        console.log('🔍 Step 7: Clearing form...');
         // Stop loading and clear form
         setIsSubmittingReport(false);
         setIsReportModalVisible(false);
@@ -1389,21 +1510,35 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         setIsSensitive(false);
         setSelectedMedia([]);
 
-        console.log('✅ Report saved offline successfully, showing alert now');
+        console.log(`✅ OFFLINE SAVE COMPLETE! ${count} pending reports total`);
+        console.log('🔍 Step 8: Showing success alert...');
         
         // Use setTimeout to ensure modal closes before alert shows
         setTimeout(() => {
+          console.log('📢 Displaying alert to user');
           Alert.alert(
             'Report Saved Offline',
-            'Your report has been saved and will be submitted automatically when you have internet connection.',
-            [{ text: 'OK', onPress: () => console.log('User acknowledged offline save') }]
+            `Your report has been saved successfully!\n\n` +
+            `Pending reports: ${count}\n\n` +
+            `Your ${count === 1 ? 'report' : 'reports'} will be automatically submitted when you reconnect to the internet. ` +
+            `You'll receive a confirmation once the submission is complete.`,
+            [{ 
+              text: 'Got it!', 
+              onPress: () => console.log('✅ User acknowledged offline save'),
+              style: 'default'
+            }]
           );
         }, 300);
         
+        console.log('✅ Offline submission process completed successfully!');
         return;
       } catch (error: any) {
-        console.error('❌ Error saving offline report:', error);
-        Alert.alert('Error', 'Failed to save report offline. Please try again.');
+        console.error('❌ ERROR in offline submission:', error);
+        console.error('❌ Error details:', {
+          message: error.message,
+          stack: error.stack
+        });
+        Alert.alert('Error', `Failed to save report offline: ${error.message}`);
         setIsSubmittingReport(false);
         return;
       }
@@ -1443,8 +1578,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         
         Alert.alert(
           'Account Suspended',
-          `Your account has been suspended and you cannot submit reports.\n\n` +
-          `Suspension until: ${suspensionEndDate}\n\n` +
+          `Your account has been suspended and you cannot submit reports.\n\nReason: ${suspensionReason}\n\nSuspension until: ${suspensionEndDate}`,
           [{ text: 'OK', style: 'default' }]
         );
         setIsSubmittingReport(false);
@@ -1586,6 +1720,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     } catch (error: any) {
       Alert.alert('Error', `Failed to submit report: ${error.message}`);
     } finally {
+      setIsSubmittingReport(false);
+    }
+    } catch (error: any) {
+      // Outer catch for entire submission process
+      console.error('❌ Fatal error in handleSubmitReport:', error);
+      Alert.alert('Error', `An unexpected error occurred: ${error.message}`);
       setIsSubmittingReport(false);
     }
   };
@@ -2089,6 +2229,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         </TouchableOpacity>
         <TouchableOpacity style={[styles.fab, styles.fabDanger]} onPress={handleReportPress}>
           <FontAwesome name="exclamation-triangle" size={22} color="white" />
+          {pendingReportsCount > 0 && (
+            <View style={styles.pendingBadge}>
+              <Text style={styles.pendingBadgeText}>{pendingReportsCount}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -2644,6 +2789,16 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+
+      {/* Sync Result Modal */}
+      <SyncResultModal
+        visible={showSyncResultModal}
+        onClose={() => setShowSyncResultModal(false)}
+        successCount={syncResult.successCount}
+        failedCount={syncResult.failedCount}
+        syncTimestamp={syncResult.timestamp}
+        failedReports={syncResult.failedReports}
+      />
 
     </SafeAreaView>
   );
@@ -3383,6 +3538,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Poppins_600SemiBold',
     textAlign: 'center',
+  },
+  pendingBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#F59E0B',
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  pendingBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Poppins_700Bold',
+    fontWeight: '700',
   },
 });
 
