@@ -38,7 +38,7 @@ export interface Report {
 
 export interface CreateReportData {
   barangay: string;
-  title: string;
+  title?: string; // Optional - kept for backward compatibility but not used in new reports
   description: string;
   incidentType: string;
   category?: string;

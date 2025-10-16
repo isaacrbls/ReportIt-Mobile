@@ -129,6 +129,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
   const [selectedBarangay, setSelectedBarangay] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [isBarangayModalVisible, setIsBarangayModalVisible] = useState(false);
+  const [barangaySearchQuery, setBarangaySearchQuery] = useState('');
   const [isTermsRequiredModalVisible, setIsTermsRequiredModalVisible] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState('');
   const [loading, setLoading] = useState(false);
@@ -360,9 +361,25 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
     setSelectedBarangay(barangay);
     setSelectedCity(city);
     setIsBarangayModalVisible(false);
+    setBarangaySearchQuery(''); // Clear search when selecting
     if (errors.barangay) {
       setErrors(prev => ({ ...prev, barangay: '' }));
     }
+  };
+
+  // Filter barangays based on search query
+  const getFilteredBarangays = () => {
+    if (!barangaySearchQuery.trim()) {
+      return BULACAN_CITIES;
+    }
+
+    const searchLower = barangaySearchQuery.toLowerCase();
+    return BULACAN_CITIES.map(city => ({
+      ...city,
+      barangays: city.barangays.filter(barangay =>
+        barangay.name.toLowerCase().includes(searchLower)
+      )
+    })).filter(city => city.barangays.length > 0); // Only show cities with matching barangays
   };
 
   return (
@@ -652,22 +669,49 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
         visible={isBarangayModalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setIsBarangayModalVisible(false)}
+        onRequestClose={() => {
+          setIsBarangayModalVisible(false);
+          setBarangaySearchQuery(''); // Clear search on close
+        }}
       >
         <View style={modalStyles.modalOverlay}>
           <View style={modalStyles.modalContent}>
             <View style={modalStyles.modalHeader}>
               <Text style={modalStyles.modalTitle}>Select Your Barangay</Text>
               <TouchableOpacity
-                onPress={() => setIsBarangayModalVisible(false)}
+                onPress={() => {
+                  setIsBarangayModalVisible(false);
+                  setBarangaySearchQuery(''); // Clear search on close
+                }}
                 style={modalStyles.closeButton}
               >
                 <Text style={modalStyles.closeButtonText}>×</Text>
               </TouchableOpacity>
             </View>
 
+            {/* Search Input */}
+            <View style={modalStyles.searchContainer}>
+              <FontAwesome name="search" size={16} color="#94A3B8" style={modalStyles.searchIcon} />
+              <TextInput
+                style={modalStyles.searchInput}
+                placeholder="Search barangay..."
+                placeholderTextColor="#94A3B8"
+                value={barangaySearchQuery}
+                onChangeText={setBarangaySearchQuery}
+                autoCapitalize="words"
+              />
+              {barangaySearchQuery.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setBarangaySearchQuery('')}
+                  style={modalStyles.clearSearchButton}
+                >
+                  <FontAwesome name="times-circle" size={16} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+            </View>
+
             <FlatList
-              data={BULACAN_CITIES}
+              data={getFilteredBarangays()}
               keyExtractor={(item) => item.name}
               showsVerticalScrollIndicator={false}
               renderItem={({ item: city }) => (
@@ -682,6 +726,15 @@ const SignupScreen: React.FC<SignupScreenProps> = ({ navigation, route }) => {
                       <Text style={modalStyles.barangayText}>{barangay.name}</Text>
                     </TouchableOpacity>
                   ))}
+                </View>
+              )}
+              ListEmptyComponent={() => (
+                <View style={modalStyles.emptySearchContainer}>
+                  <FontAwesome name="search" size={48} color="#CBD5E1" />
+                  <Text style={modalStyles.emptySearchText}>No barangays found</Text>
+                  <Text style={modalStyles.emptySearchSubtext}>
+                    Try searching with a different keyword
+                  </Text>
                 </View>
               )}
             />
@@ -1013,6 +1066,50 @@ const modalStyles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: '#374151',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    marginHorizontal: 20,
+    marginVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#111827',
+  },
+  clearSearchButton: {
+    padding: 4,
+  },
+  emptySearchContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  emptySearchText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#6B7280',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptySearchSubtext: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#94A3B8',
+    marginTop: 8,
+    textAlign: 'center',
   },
   termsModalOverlay: {
     flex: 1,

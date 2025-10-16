@@ -13,9 +13,13 @@ import {
   Animated,
   ScrollView,
   BackHandler,
+  Linking,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { WebView } from 'react-native-webview';
+import RNImmediatePhoneCall from 'react-native-phone-call';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Camera } from 'expo-camera';
@@ -327,9 +331,9 @@ const MapView = React.forwardRef<any, { userLocation: LocationCoords | null; rep
                     .addTo(map)
                 .bindPopup(\`
                     <div style="max-width: 300px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 12px; background: white; border-radius: 8px;">
-                        <!-- Title Header -->
+                        <!-- Incident Type Header -->
                         <div style="font-weight: 700; color: #1F2937; font-size: 16px; margin-bottom: 14px; line-height: 1.3; border-bottom: 2px solid #E5E7EB; padding-bottom: 8px;">
-                            ${report.title || 'Untitled Report'}
+                            ${report.incidentType || 'Incident Report'}
                         </div>
                         
                         <!-- Barangay -->
@@ -562,6 +566,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   const [isLocationPermissionModalVisible, setIsLocationPermissionModalVisible] = useState(false);
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
   const [isLogoutModalVisible, setIsLogoutModalVisible] = useState(false);
+  const [isEmergencyCallModalVisible, setIsEmergencyCallModalVisible] = useState(false);
   const [reportTitle, setReportTitle] = useState('');
   const [reportType, setReportType] = useState('');
   const [reportDescription, setReportDescription] = useState('');
@@ -868,6 +873,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         setIsMediaPickerVisible(false);
         return true;
       }
+      if (isEmergencyCallModalVisible) {
+        setIsEmergencyCallModalVisible(false);
+        return true;
+      }
       if (isLocationPermissionModalVisible) {
         setIsLocationPermissionModalVisible(false);
         return true;
@@ -897,7 +906,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     });
 
     return () => backHandler.remove();
-  }, [isReportModalVisible, isMediaPickerVisible, isLocationPermissionModalVisible, isNotificationModalVisible, isLogoutModalVisible, isSidebarVisible, navigation]);
+  }, [isReportModalVisible, isMediaPickerVisible, isEmergencyCallModalVisible, isLocationPermissionModalVisible, isNotificationModalVisible, isLogoutModalVisible, isSidebarVisible, navigation]);
 
   // Auth state listener
   useEffect(() => {
@@ -1141,7 +1150,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           let mediaType = report.mediaType;
 
           if (report.mediaAssets && report.mediaAssets.length > 0) {
-            console.log(`📤 Uploading ${report.mediaAssets.length} media files for report: ${report.title}`);
+            console.log(`📤 Uploading ${report.mediaAssets.length} media files for report: ${report.incidentType}`);
             const uploadPromises = report.mediaAssets.map(async (media: any) => {
               return await uploadMediaToStorage(media, report.submittedByEmail);
             });
@@ -1162,7 +1171,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           // Submit report with original timestamp
           const reportData: CreateReportData = {
             barangay: report.barangay,
-            title: report.title,
             description: report.description,
             incidentType: report.incidentType,
             category: report.category,
@@ -1174,7 +1182,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             mediaURL
           };
 
-          console.log(`📡 Submitting report to Firestore: ${report.title}`);
+          console.log(`📡 Submitting report to Firestore: ${report.incidentType}`);
           const result = await ReportsService.createReport(reportData, report.createdAt);
           
           if (result.success && result.reportId) {
@@ -1188,7 +1196,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             await OfflineReportsService.removeOfflineReport(report.id);
             
             successCount++;
-            console.log(`✅ Report synced successfully: ${report.title} (Firestore ID: ${result.reportId})`);
+            console.log(`✅ Report synced successfully: ${report.incidentType} (Firestore ID: ${result.reportId})`);
           } else {
             // Mark as failed with error message
             const errorMsg = result.error || 'Unknown error';
@@ -1196,10 +1204,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
             
             failureCount++;
             failedReportsDetails.push({
-              title: report.title,
+              title: report.incidentType || 'Unknown',
               error: errorMsg,
             });
-            console.error(`❌ Failed to sync report: ${report.title} - ${errorMsg}`);
+            console.error(`❌ Failed to sync report: ${report.incidentType} - ${errorMsg}`);
           }
         } catch (error: any) {
           const errorMsg = error.message || 'Network error';
@@ -1209,10 +1217,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
           
           failureCount++;
           failedReportsDetails.push({
-            title: report.title,
+            title: report.incidentType || 'Unknown',
             error: errorMsg,
           });
-          console.error(`❌ Exception during sync for report ${report.title}:`, error);
+          console.error(`❌ Exception during sync for report ${report.incidentType}:`, error);
         }
       }
 
@@ -1331,11 +1339,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
   const handleSubmitReport = async () => {
     try {
       // ===== STEP 1: Basic validation =====
-      if (!reportTitle.trim()) {
-        Alert.alert('Error', 'Please enter a title for the incident');
-        return;
-      }
-
       if (reportCategory === 'Select type of incident') {
         Alert.alert('Error', 'Please select a category for the incident');
         return;
@@ -1371,8 +1374,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       if (!isOnline) {
         console.log('💾 Device is offline - saving report locally');
         console.log('📝 Report data:', {
-          title: reportTitle,
-          category: reportCategory,
+          incidentType: reportCategory,
           description: reportDescription.substring(0, 50)
         });
         
@@ -1472,7 +1474,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         const offlineReport = {
           id: OfflineReportsService.generateLocalId(),
           barangay: cachedProfile.barangay,
-          title: reportTitle.trim(),
           description: reportDescription.trim(),
           incidentType: reportCategory !== 'Select type of incident' ? reportCategory : 'Others',
           category: reportCategory !== 'Select type of incident' ? reportCategory : 'Others',
@@ -1503,7 +1504,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         // Stop loading and clear form
         setIsSubmittingReport(false);
         setIsReportModalVisible(false);
-        setReportTitle('');
         setReportType('');
         setReportDescription('');
         setReportCategory('Select type of incident');
@@ -1655,7 +1655,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       // Prepare report data
       const reportData: CreateReportData = {
         barangay: userBarangay,
-        title: reportTitle.trim(),
         description: reportDescription.trim(),
         incidentType: reportCategory !== 'Select type of incident' ? reportCategory : 'Others',
         category: reportCategory !== 'Select type of incident' ? reportCategory : 'Others',
@@ -1704,7 +1703,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
       if (result.success) {
         // Close modal and clear form
         setIsReportModalVisible(false);
-        setReportTitle('');
         setReportType('');
         setReportDescription('');
         setReportCategory('Select type of incident');
@@ -1982,13 +1980,60 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
 
   const handleCloseReportModal = () => {
     // Clear all form data including media when modal is closed
-    setReportTitle('');
     setReportType('');
     setReportDescription('');
     setReportCategory('Select type of incident');
     setIsSensitive(false);
     setSelectedMedia([]);
     setIsReportModalVisible(false);
+  };
+
+  // Function to dial a phone number
+  const handleDialPhone = async (phoneNumber: string, label: string) => {
+    try {
+      if (Platform.OS === 'android') {
+        // Android: Request permission and make direct call
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CALL_PHONE,
+          {
+            title: 'Phone Call Permission',
+            message: 'ReportIt needs access to make emergency calls directly to local authorities.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          // Permission granted - make direct call
+          const args = {
+            number: phoneNumber,
+            prompt: false, // This makes the call immediately without confirmation
+          };
+          
+          // @ts-ignore - Package doesn't have TypeScript definitions
+          RNImmediatePhoneCall(args);
+          
+          // Close modal after initiating call
+          setIsEmergencyCallModalVisible(false);
+        } else {
+          // Permission denied - fallback to dialer
+          await Linking.openURL(`tel:${phoneNumber}`);
+          setIsEmergencyCallModalVisible(false);
+        }
+      } else {
+        // iOS: Use standard tel: link (Apple doesn't allow direct calling)
+        await Linking.openURL(`tel:${phoneNumber}`);
+        setIsEmergencyCallModalVisible(false);
+      }
+    } catch (error: any) {
+      console.error('Failed to make call:', error);
+      Alert.alert(
+        'Unable to Make Call',
+        'Your device does not support making phone calls. Please dial manually:\n\n' + phoneNumber,
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const handleNotificationPress = async () => {
@@ -2220,6 +2265,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         />
       </View>
 
+      {/* Left FAB - Emergency Call */}
+      <View style={styles.fabContainerLeft}>
+        <TouchableOpacity 
+          style={[styles.fab, styles.fabEmergency]} 
+          onPress={() => setIsEmergencyCallModalVisible(true)}
+        >
+          <FontAwesome name="phone" size={22} color="white" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Right FABs - Location & Report */}
       <View style={styles.fabContainer}>
         <TouchableOpacity 
           style={styles.fab} 
@@ -2586,6 +2642,135 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
         </View>
       </Modal>
 
+      {/* Emergency Call Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isEmergencyCallModalVisible}
+        onRequestClose={() => setIsEmergencyCallModalVisible(false)}
+      >
+        <View style={styles.reportModalOverlay}>
+          <View style={styles.emergencyCallModal}>
+            <View style={styles.emergencyCallHeader}>
+              <FontAwesome name="phone" size={24} color="#EF4444" />
+              <Text style={styles.emergencyCallTitle}>Call Local Authorities</Text>
+            </View>
+
+            <ScrollView 
+              style={styles.emergencyCallScrollView}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Always show PNP Hotline */}
+              <TouchableOpacity 
+                style={styles.hotlineButton}
+                onPress={() => handleDialPhone('7910257', 'Malolos PNP')}
+              >
+                <View style={styles.hotlineIconContainer}>
+                  <FontAwesome name="shield" size={24} color="#EF4444" />
+                </View>
+                <View style={styles.hotlineInfo}>
+                  <Text style={styles.hotlineName}>Malolos PNP</Text>
+                  <Text style={styles.hotlineNumber}>791-0257</Text>
+                </View>
+                <FontAwesome name="phone" size={20} color="#6B7280" />
+              </TouchableOpacity>
+
+              {/* Show barangay hotline if user is logged in and registered in specific barangays */}
+              {isUserLoggedIn && userProfile && (
+                <>
+                  {userProfile.barangay === 'Mojon' && (
+                    <TouchableOpacity 
+                      style={styles.hotlineButton}
+                      onPress={() => handleDialPhone('8167602', 'Barangay Mojon')}
+                    >
+                      <View style={styles.hotlineIconContainer}>
+                        <FontAwesome name="home" size={24} color="#EF4444" />
+                      </View>
+                      <View style={styles.hotlineInfo}>
+                        <Text style={styles.hotlineName}>Barangay Mojon</Text>
+                        <Text style={styles.hotlineNumber}>816-7602</Text>
+                      </View>
+                      <FontAwesome name="phone" size={20} color="#6B7280" />
+                    </TouchableOpacity>
+                  )}
+
+                  {userProfile.barangay === 'Pinagbakahan' && (
+                    <TouchableOpacity 
+                      style={styles.hotlineButton}
+                      onPress={() => handleDialPhone('7906090', 'Barangay Pinagbakahan')}
+                    >
+                      <View style={styles.hotlineIconContainer}>
+                        <FontAwesome name="home" size={24} color="#EF4444" />
+                      </View>
+                      <View style={styles.hotlineInfo}>
+                        <Text style={styles.hotlineName}>Barangay Pinagbakahan</Text>
+                        <Text style={styles.hotlineNumber}>790-6090</Text>
+                      </View>
+                      <FontAwesome name="phone" size={20} color="#6B7280" />
+                    </TouchableOpacity>
+                  )}
+
+                  {userProfile.barangay === 'Bulihan' && (
+                    <TouchableOpacity 
+                      style={styles.hotlineButton}
+                      onPress={() => handleDialPhone('8939529', 'Barangay Bulihan')}
+                    >
+                      <View style={styles.hotlineIconContainer}>
+                        <FontAwesome name="home" size={24} color="#EF4444" />
+                      </View>
+                      <View style={styles.hotlineInfo}>
+                        <Text style={styles.hotlineName}>Barangay Bulihan</Text>
+                        <Text style={styles.hotlineNumber}>893-9529</Text>
+                      </View>
+                      <FontAwesome name="phone" size={20} color="#6B7280" />
+                    </TouchableOpacity>
+                  )}
+
+                  {userProfile.barangay === 'Dakila' && (
+                    <TouchableOpacity 
+                      style={styles.hotlineButton}
+                      onPress={() => handleDialPhone('7944569', 'Barangay Dakila')}
+                    >
+                      <View style={styles.hotlineIconContainer}>
+                        <FontAwesome name="home" size={24} color="#EF4444" />
+                      </View>
+                      <View style={styles.hotlineInfo}>
+                        <Text style={styles.hotlineName}>Barangay Dakila</Text>
+                        <Text style={styles.hotlineNumber}>794-4569</Text>
+                      </View>
+                      <FontAwesome name="phone" size={20} color="#6B7280" />
+                    </TouchableOpacity>
+                  )}
+
+                  {userProfile.barangay === 'Look 1st' && (
+                    <TouchableOpacity 
+                      style={styles.hotlineButton}
+                      onPress={() => handleDialPhone('6622464', 'Barangay Look 1st')}
+                    >
+                      <View style={styles.hotlineIconContainer}>
+                        <FontAwesome name="home" size={24} color="#EF4444" />
+                      </View>
+                      <View style={styles.hotlineInfo}>
+                        <Text style={styles.hotlineName}>Barangay Look 1st</Text>
+                        <Text style={styles.hotlineNumber}>662-2464</Text>
+                      </View>
+                      <FontAwesome name="phone" size={20} color="#6B7280" />
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity 
+              style={styles.emergencyCallCloseButton}
+              onPress={() => setIsEmergencyCallModalVisible(false)}
+            >
+              <Text style={styles.emergencyCallCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         animationType="fade"
         transparent={true}
@@ -2615,17 +2800,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
               </View>
               
               <View style={styles.reportForm}>
-              {/* Title of Incident */}
-              <Text style={styles.reportLabel}>Title of incident</Text>
-              <TextInput
-                style={styles.reportInput}
-                value={reportTitle}
-                onChangeText={setReportTitle}
-                placeholder="Enter incident title"
-                placeholderTextColor="#9CA3AF"
-                maxLength={100}
-              />
-
               {/* Category Dropdown */}
               <Text style={styles.reportLabel}>Type of incident</Text>
               <TouchableOpacity 
@@ -2895,6 +3069,12 @@ const styles = StyleSheet.create({
     bottom: responsiveSize(140, 160, 170, 180, 186),
     gap: responsiveSize(16, 20, 22, 24, 25),
   },
+  fabContainerLeft: {
+    position: 'absolute',
+    left: responsivePadding(16),
+    bottom: responsiveSize(140, 160, 170, 180, 186),
+    gap: responsiveSize(16, 20, 22, 24, 25),
+  },
   fab: {
     width: responsiveSize(56, 64, 68, 72, 74),
     height: responsiveSize(56, 64, 68, 72, 74),
@@ -2912,6 +3092,9 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   fabDanger: {
+    backgroundColor: '#EF4444',
+  },
+  fabEmergency: {
     backgroundColor: '#EF4444',
   },
   fabDisabled: {
@@ -3562,6 +3745,87 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Poppins_700Bold',
     fontWeight: '700',
+  },
+  // Emergency Call Modal Styles
+  emergencyCallModal: {
+    backgroundColor: 'white',
+    borderRadius: responsiveSize(16, 18, 20, 22, 24),
+    padding: responsivePadding(20),
+    width: responsiveWidth(90),
+    maxHeight: responsiveHeight(70),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  emergencyCallHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsiveSize(12, 14, 16, 18, 20),
+    marginBottom: responsiveSize(20, 22, 24, 26, 28),
+    paddingBottom: responsiveSize(16, 18, 20, 22, 24),
+    borderBottomWidth: 2,
+    borderBottomColor: '#F3F4F6',
+  },
+  emergencyCallTitle: {
+    fontSize: responsiveFontSize(20),
+    fontFamily: 'Poppins_700Bold',
+    color: '#1F2937',
+    flex: 1,
+  },
+  emergencyCallScrollView: {
+    maxHeight: responsiveHeight(45),
+  },
+  hotlineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: responsivePadding(16),
+    backgroundColor: '#F9FAFB',
+    borderRadius: responsiveSize(12, 14, 16, 16, 18),
+    marginBottom: responsiveSize(12, 14, 16, 16, 18),
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  hotlineIconContainer: {
+    width: responsiveSize(48, 52, 56, 60, 64),
+    height: responsiveSize(48, 52, 56, 60, 64),
+    borderRadius: responsiveSize(24, 26, 28, 30, 32),
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: responsiveSize(12, 14, 16, 18, 20),
+  },
+  hotlineInfo: {
+    flex: 1,
+  },
+  hotlineName: {
+    fontSize: responsiveFontSize(16),
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  hotlineNumber: {
+    fontSize: responsiveFontSize(14),
+    fontFamily: 'Poppins_400Regular',
+    color: '#6B7280',
+  },
+  emergencyCallCloseButton: {
+    backgroundColor: '#EF4444',
+    paddingVertical: responsiveSize(12, 14, 16, 16, 18),
+    borderRadius: responsiveSize(8, 10, 12, 12, 14),
+    alignItems: 'center',
+    marginTop: responsiveSize(16, 18, 20, 22, 24),
+  },
+  emergencyCallCloseText: {
+    color: 'white',
+    fontSize: responsiveFontSize(16),
+    fontFamily: 'Poppins_600SemiBold',
   },
 });
 

@@ -6,7 +6,7 @@ const SYNC_METADATA_KEY = '@reportit_sync_metadata';
 export interface OfflineReport {
   id: string; // Temporary local ID
   barangay: string;
-  title: string;
+  title?: string; // Optional - kept for backward compatibility but not used in new reports
   description: string;
   incidentType: string;
   category?: string;

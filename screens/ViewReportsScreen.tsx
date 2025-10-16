@@ -288,17 +288,11 @@ export default function ViewReportsScreen() {
                     <Text style={styles.detailStatusText}>{selectedReport.status || 'Pending'}</Text>
                   </View>
 
-                  {/* Title */}
-                  <Text style={styles.detailTitle}>{selectedReport.title || 'Untitled Report'}</Text>
+                  {/* Incident Type as Title */}
+                  <Text style={styles.detailTitle}>{selectedReport.incidentType || 'Incident Report'}</Text>
 
                   {/* Meta Info */}
                   <View style={styles.detailMeta}>
-                    <View style={styles.detailMetaRow}>
-                      <FontAwesome name="exclamation-triangle" size={16} color="#EF4444" />
-                      <Text style={styles.detailMetaText}>
-                        {selectedReport.incidentType || 'Unknown Type'}
-                      </Text>
-                    </View>
                     <View style={styles.detailMetaRow}>
                       <FontAwesome name="map-marker" size={16} color="#EF4444" />
                       <Text style={styles.detailMetaText}>
