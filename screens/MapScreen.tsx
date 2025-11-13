@@ -19,7 +19,6 @@ import {
 } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { WebView } from 'react-native-webview';
-import RNImmediatePhoneCall from 'react-native-phone-call';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Camera } from 'expo-camera';
@@ -32,6 +31,7 @@ import { OfflineReportsService } from '../services/OfflineReportsService';
 import { SyncResultModal } from '../components/SyncResultModal';
 import { AuthService } from '../services/AuthService';
 import { UserService } from '../services/UserService';
+import { PhoneCallService } from '../services/PhoneCallService';
 import { isReportingAllowed, BULACAN_CITIES } from '../utils/BulacanBarangays';
 import { NavigationHelper } from '../utils/NavigationHelper';
 import {
@@ -1988,49 +1988,35 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation }) => {
     setIsReportModalVisible(false);
   };
 
-  // Function to dial a phone number
+  // Function to dial a phone number using PhoneCallService
   const handleDialPhone = async (phoneNumber: string, label: string) => {
+    console.log(`📞 Initiating call to ${label} (${phoneNumber})`);
+    
     try {
-      if (Platform.OS === 'android') {
-        // Android: Request permission and make direct call
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.CALL_PHONE,
-          {
-            title: 'Phone Call Permission',
-            message: 'ReportIt needs access to make emergency calls directly to local authorities.',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          }
-        );
-
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          // Permission granted - make direct call
-          const args = {
-            number: phoneNumber,
-            prompt: false, // This makes the call immediately without confirmation
-          };
-          
-          // @ts-ignore - Package doesn't have TypeScript definitions
-          RNImmediatePhoneCall(args);
-          
-          // Close modal after initiating call
-          setIsEmergencyCallModalVisible(false);
-        } else {
-          // Permission denied - fallback to dialer
-          await Linking.openURL(`tel:${phoneNumber}`);
-          setIsEmergencyCallModalVisible(false);
-        }
-      } else {
-        // iOS: Use standard tel: link (Apple doesn't allow direct calling)
-        await Linking.openURL(`tel:${phoneNumber}`);
+      // Use the PhoneCallService which opens the dialer with pre-filled number
+      // User presses call button manually (most reliable approach)
+      const result = await PhoneCallService.makePhoneCall(phoneNumber);
+      
+      if (result.success) {
+        console.log('✅ Dialer opened successfully');
+        // Close modal after opening dialer
         setIsEmergencyCallModalVisible(false);
+      } else {
+        // Show error if dialer couldn't be opened
+        console.error('❌ Failed to open dialer:', result.error);
+        
+        Alert.alert(
+          'Unable to Open Dialer',
+          `${result.error}\n\nPlease dial manually:\n${phoneNumber}`,
+          [{ text: 'OK' }]
+        );
       }
     } catch (error: any) {
-      console.error('Failed to make call:', error);
+      console.error('❌ Unexpected error opening dialer:', error);
+      
       Alert.alert(
-        'Unable to Make Call',
-        'Your device does not support making phone calls. Please dial manually:\n\n' + phoneNumber,
+        'Error',
+        `Failed to open dialer. Please dial manually:\n\n${phoneNumber}`,
         [{ text: 'OK' }]
       );
     }
