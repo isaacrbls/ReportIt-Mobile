@@ -7,7 +7,17 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test:e2e": "wdio run tests/config/wdio.conf.ts",
+    "test:e2e:auth": "wdio run tests/config/wdio.conf.ts --spec tests/e2e/auth.spec.ts",
+    "test:e2e:report": "wdio run tests/config/wdio.conf.ts --spec tests/e2e/reporting.spec.ts",
+    "test:e2e:location": "wdio run tests/config/wdio.conf.ts --spec tests/e2e/location-map.spec.ts",
+    "test:android": "wdio run tests/config/wdio.conf.ts --platform android",
+    "test:ios": "wdio run tests/config/wdio.conf.ts --platform ios",
+    "test:e2e:allure": "wdio run tests/config/wdio.conf.ts && npm run test:report",
+    "test:report": "allure generate tests/reports/allure-results --clean && allure open",
+    "appium": "appium",
+    "appium:doctor": "appium-doctor"
   },
   "overrides": {
     "metro-cache": "0.83.1"
@@ -47,10 +57,24 @@
     "react-native-worklets": "0.5.1"
   },
   "devDependencies": {
+    "@types/chai": "^5.0.4",
+    "@types/mocha": "^10.0.12",
     "@types/react": "~19.1.0",
     "@types/react-native-vector-icons": "^6.4.18",
+    "@wdio/allure-reporter": "^9.5.6",
+    "@wdio/appium-service": "^9.5.6",
+    "@wdio/cli": "^9.5.6",
+    "@wdio/local-runner": "^9.5.6",
+    "@wdio/mocha-framework": "^9.5.6",
+    "@wdio/spec-reporter": "^9.5.6",
+    "allure-commandline": "^3.0.11",
+    "appium": "^3.1.1",
     "babel-preset-expo": "^54.0.3",
+    "chai": "^5.1.2",
     "eas-cli": "^16.20.4",
-    "typescript": "~5.9.2"
+    "mocha": "^11.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.2",
+    "webdriverio": "^9.5.6"
   }
 }
